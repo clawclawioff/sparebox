@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Server, Cpu } from "lucide-react";
 
-export default function SignupPage() {
+function SignupForm() {
   const searchParams = useSearchParams();
   const initialRole = searchParams.get("role") || "";
   
@@ -162,5 +162,25 @@ export default function SignupPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={
+      <div className="w-full max-w-md">
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 animate-pulse">
+          <div className="h-8 bg-gray-800 rounded w-3/4 mb-4"></div>
+          <div className="h-4 bg-gray-800 rounded w-1/2 mb-6"></div>
+          <div className="space-y-4">
+            <div className="h-24 bg-gray-800 rounded"></div>
+            <div className="h-10 bg-gray-800 rounded"></div>
+            <div className="h-10 bg-gray-800 rounded"></div>
+          </div>
+        </div>
+      </div>
+    }>
+      <SignupForm />
+    </Suspense>
   );
 }
