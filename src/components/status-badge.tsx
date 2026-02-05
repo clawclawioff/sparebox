@@ -1,0 +1,33 @@
+"use client";
+
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
+interface StatusBadgeProps {
+  status: string;
+  className?: string;
+}
+
+const statusConfig: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; dotColor: string }> = {
+  running: { variant: "default", dotColor: "bg-emerald-400" },
+  active: { variant: "default", dotColor: "bg-emerald-400" },
+  online: { variant: "default", dotColor: "bg-emerald-400" },
+  stopped: { variant: "secondary", dotColor: "bg-zinc-400" },
+  offline: { variant: "secondary", dotColor: "bg-zinc-400" },
+  inactive: { variant: "secondary", dotColor: "bg-zinc-400" },
+  pending: { variant: "outline", dotColor: "bg-yellow-400" },
+  deploying: { variant: "outline", dotColor: "bg-blue-400" },
+  failed: { variant: "destructive", dotColor: "bg-red-400" },
+  suspended: { variant: "destructive", dotColor: "bg-red-400" },
+};
+
+export function StatusBadge({ status, className }: StatusBadgeProps) {
+  const config = statusConfig[status] || statusConfig.pending;
+
+  return (
+    <Badge variant={config.variant} className={cn("gap-1.5", className)}>
+      <span className={cn("w-1.5 h-1.5 rounded-full", config.dotColor)} />
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </Badge>
+  );
+}

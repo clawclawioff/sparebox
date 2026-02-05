@@ -11,6 +11,9 @@
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { auth } from '@/server/auth'
+import { db } from '@/db'
+import { user } from '@/db/schema'
+import { eq } from 'drizzle-orm'
 
 export type UserRole = 'user' | 'host' | 'admin'
 
@@ -38,12 +41,14 @@ export interface Session {
 /**
  * Get the current session (or null if not authenticated)
  * 
+ * Fetches the role directly from the database to ensure accuracy.
+ * 
  * @example
  * ```tsx
  * // In a Server Component
  * const session = await getSession()
  * if (session) {
- *   console.log(session.user.email)
+ *   console.log(session.user.email, session.user.role)
  * }
  * ```
  */
@@ -57,14 +62,24 @@ export async function getSession(): Promise<Session | null> {
       return null
     }
     
-    // Map to our Session type, providing defaults for custom fields
+    // Fetch the actual role from the database
+    // This ensures we always have the correct role, even if better-auth
+    // doesn't include it in the session response
+    const userData = await db.query.user.findFirst({
+      where: eq(user.id, result.user.id),
+      columns: { role: true },
+    })
+    
+    const actualRole = (userData?.role as UserRole) || 'user'
+    
+    // Map to our Session type
     const session: Session = {
       user: {
         id: result.user.id,
         email: result.user.email,
         name: result.user.name ?? null,
         image: result.user.image ?? null,
-        role: ((result.user as any).role as UserRole) || 'user',
+        role: actualRole,
         emailVerified: result.user.emailVerified ?? false,
         createdAt: result.user.createdAt,
         updatedAt: result.user.updatedAt,

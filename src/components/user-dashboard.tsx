@@ -3,9 +3,11 @@
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
 import { Cpu, DollarSign, Clock, Plus } from "lucide-react";
-import { StatCard } from "./stat-card";
-import { StatusBadge } from "./status-badge";
-import { EmptyState } from "./empty-state";
+import { StatCard } from "@/components/stat-card";
+import { StatusBadge } from "@/components/status-badge";
+import { EmptyState } from "@/components/empty-state";
+import { Card } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface UserDashboardProps {
   userId: string;

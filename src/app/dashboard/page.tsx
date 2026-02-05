@@ -1,6 +1,6 @@
 import { requireAuth } from "@/lib/auth/guards";
-import { UserDashboard } from "./components/user-dashboard";
-import { HostDashboard } from "./components/host-dashboard";
+import { UserDashboard } from "@/components/user-dashboard";
+import { HostDashboard } from "@/components/host-dashboard";
 
 /**
  * Dashboard Overview Page

@@ -1,5 +1,5 @@
 import { requireAuth } from "@/lib/auth/guards";
-import { DashboardShell } from "./components/dashboard-shell";
+import { DashboardShell } from "@/components/dashboard-shell";
 
 /**
  * Dashboard Layout - Protected by server-side auth
