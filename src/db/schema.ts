@@ -32,34 +32,77 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "trialing",
 ]);
 
-// Users table (managed by better-auth, extended with our fields)
-export const users = pgTable("users", {
+// ============================================
+// BETTER-AUTH REQUIRED TABLES
+// ============================================
+
+// User table (required by better-auth - singular name!)
+export const user = pgTable("user", {
   id: text("id").primaryKey(),
   email: text("email").notNull().unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
   name: text("name"),
+  image: text("image"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  // Custom fields for Sparebox
   role: userRoleEnum("role").notNull().default("user"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeConnectAccountId: text("stripe_connect_account_id"),
+});
+
+// Session table (required by better-auth)
+export const session = pgTable("session", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Sessions table (for better-auth)
-export const sessions = pgTable("sessions", {
+// Account table (required by better-auth for OAuth)
+export const account = pgTable("account", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
+    .references(() => user.id, { onDelete: "cascade" }),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at"),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+  scope: text("scope"),
+  password: text("password"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Verification table (required by better-auth for email verification)
+export const verification = pgTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// ============================================
+// SPAREBOX BUSINESS TABLES
+// ============================================
 
 // Hosts (machines that can run agents)
 export const hosts = pgTable("hosts", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: text("user_id")
     .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
+    .references(() => user.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
   status: hostStatusEnum("status").notNull().default("pending"),
@@ -76,7 +119,7 @@ export const hosts = pgTable("hosts", {
   city: text("city"),
 
   // Pricing (cents per month)
-  pricePerMonth: integer("price_per_month").notNull().default(1000), // $10 default
+  pricePerMonth: integer("price_per_month").notNull().default(1000),
 
   // Networking
   tailscaleIp: text("tailscale_ip"),
@@ -84,7 +127,7 @@ export const hosts = pgTable("hosts", {
 
   // Stats
   uptimePercent: real("uptime_percent").default(100),
-  totalEarnings: integer("total_earnings").default(0), // cents
+  totalEarnings: integer("total_earnings").default(0),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -95,96 +138,94 @@ export const agents = pgTable("agents", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: text("user_id")
     .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
+    .references(() => user.id, { onDelete: "cascade" }),
   hostId: uuid("host_id").references(() => hosts.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   status: agentStatusEnum("status").notNull().default("pending"),
-
-  // Configuration
-  config: text("config"), // JSON blob of OpenClaw config
-
-  // Stats
+  config: text("config"),
   lastActive: timestamp("last_active"),
-  totalUptime: integer("total_uptime").default(0), // seconds
-
+  totalUptime: integer("total_uptime").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Subscriptions (user subscriptions for agents)
+// Subscriptions
 export const subscriptions = pgTable("subscriptions", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: text("user_id")
     .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
+    .references(() => user.id, { onDelete: "cascade" }),
   agentId: uuid("agent_id")
     .notNull()
     .references(() => agents.id, { onDelete: "cascade" }),
   hostId: uuid("host_id")
     .notNull()
     .references(() => hosts.id, { onDelete: "cascade" }),
-
   status: subscriptionStatusEnum("status").notNull().default("active"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   stripePriceId: text("stripe_price_id"),
-
-  // Billing
-  pricePerMonth: integer("price_per_month").notNull(), // cents
-  hostPayoutPerMonth: integer("host_payout_per_month").notNull(), // cents (60% of price)
-  platformFeePerMonth: integer("platform_fee_per_month").notNull(), // cents (40% of price)
-
+  pricePerMonth: integer("price_per_month").notNull(),
+  hostPayoutPerMonth: integer("host_payout_per_month").notNull(),
+  platformFeePerMonth: integer("platform_fee_per_month").notNull(),
   currentPeriodStart: timestamp("current_period_start"),
   currentPeriodEnd: timestamp("current_period_end"),
-
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Host payouts (record of payments to hosts)
+// Payouts
 export const payouts = pgTable("payouts", {
   id: uuid("id").defaultRandom().primaryKey(),
   hostId: uuid("host_id")
     .notNull()
     .references(() => hosts.id, { onDelete: "cascade" }),
-  amount: integer("amount").notNull(), // cents
+  amount: integer("amount").notNull(),
   stripeTransferId: text("stripe_transfer_id"),
-  status: text("status").notNull().default("pending"), // pending, completed, failed
+  status: text("status").notNull().default("pending"),
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Relations
-export const usersRelations = relations(users, ({ many }) => ({
+// ============================================
+// RELATIONS
+// ============================================
+
+export const userRelations = relations(user, ({ many }) => ({
+  sessions: many(session),
+  accounts: many(account),
   hosts: many(hosts),
   agents: many(agents),
   subscriptions: many(subscriptions),
-  sessions: many(sessions),
+}));
+
+export const sessionRelations = relations(session, ({ one }) => ({
+  user: one(user, { fields: [session.userId], references: [user.id] }),
+}));
+
+export const accountRelations = relations(account, ({ one }) => ({
+  user: one(user, { fields: [account.userId], references: [user.id] }),
 }));
 
 export const hostsRelations = relations(hosts, ({ one, many }) => ({
-  user: one(users, { fields: [hosts.userId], references: [users.id] }),
+  user: one(user, { fields: [hosts.userId], references: [user.id] }),
   agents: many(agents),
   subscriptions: many(subscriptions),
   payouts: many(payouts),
 }));
 
 export const agentsRelations = relations(agents, ({ one, many }) => ({
-  user: one(users, { fields: [agents.userId], references: [users.id] }),
+  user: one(user, { fields: [agents.userId], references: [user.id] }),
   host: one(hosts, { fields: [agents.hostId], references: [hosts.id] }),
   subscriptions: many(subscriptions),
 }));
 
 export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
-  user: one(users, { fields: [subscriptions.userId], references: [users.id] }),
+  user: one(user, { fields: [subscriptions.userId], references: [user.id] }),
   agent: one(agents, { fields: [subscriptions.agentId], references: [agents.id] }),
   host: one(hosts, { fields: [subscriptions.hostId], references: [hosts.id] }),
 }));
 
 export const payoutsRelations = relations(payouts, ({ one }) => ({
   host: one(hosts, { fields: [payouts.hostId], references: [hosts.id] }),
-}));
-
-export const sessionsRelations = relations(sessions, ({ one }) => ({
-  user: one(users, { fields: [sessions.userId], references: [users.id] }),
 }));

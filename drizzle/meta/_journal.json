@@ -8,6 +8,13 @@
       "when": 1770326124944,
       "tag": "0000_acoustic_earthquake",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1770327529847,
+      "tag": "0001_lively_hulk",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router, protectedProcedure } from "../trpc";
-import { hosts } from "@/db/schema";
+import { hosts } from "@/db";
 import { eq } from "drizzle-orm";
 
 export const hostsRouter = router({
