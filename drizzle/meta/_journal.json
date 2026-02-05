@@ -15,6 +15,13 @@
       "when": 1770327529847,
       "tag": "0001_lively_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770330110633,
+      "tag": "0002_add_heartbeats_prefs",
+      "breakpoints": true
     }
   ]
 }

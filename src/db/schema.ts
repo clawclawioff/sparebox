@@ -143,6 +143,7 @@ export const agents = pgTable("agents", {
   name: text("name").notNull(),
   status: agentStatusEnum("status").notNull().default("pending"),
   config: text("config"),
+  openclawVersion: text("openclaw_version").default("latest"),
   lastActive: timestamp("last_active"),
   totalUptime: integer("total_uptime").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -169,6 +170,7 @@ export const subscriptions = pgTable("subscriptions", {
   platformFeePerMonth: integer("platform_fee_per_month").notNull(),
   currentPeriodStart: timestamp("current_period_start"),
   currentPeriodEnd: timestamp("current_period_end"),
+  canceledAt: timestamp("canceled_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -185,6 +187,40 @@ export const payouts = pgTable("payouts", {
   periodStart: timestamp("period_start").notNull(),
   periodEnd: timestamp("period_end").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Host Heartbeats (for monitoring)
+export const hostHeartbeats = pgTable("host_heartbeats", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  hostId: uuid("host_id")
+    .notNull()
+    .references(() => hosts.id, { onDelete: "cascade" }),
+  cpuUsage: real("cpu_usage"),
+  ramUsage: real("ram_usage"),
+  diskUsage: real("disk_usage"),
+  agentCount: integer("agent_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// User Preferences (notification settings)
+export const userPreferences = pgTable("user_preferences", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: "cascade" }),
+  // Notifications
+  emailSecurityAlerts: boolean("email_security_alerts").default(true),
+  emailAccountUpdates: boolean("email_account_updates").default(true),
+  emailAgentStatus: boolean("email_agent_status").default(true),
+  emailBillingAlerts: boolean("email_billing_alerts").default(true),
+  emailNewDeployments: boolean("email_new_deployments").default(true),
+  emailMachineOffline: boolean("email_machine_offline").default(true),
+  emailPayouts: boolean("email_payouts").default(true),
+  emailProductUpdates: boolean("email_product_updates").default(false),
+  emailTips: boolean("email_tips").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // ============================================
@@ -228,4 +264,12 @@ export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
 
 export const payoutsRelations = relations(payouts, ({ one }) => ({
   host: one(hosts, { fields: [payouts.hostId], references: [hosts.id] }),
+}));
+
+export const hostHeartbeatsRelations = relations(hostHeartbeats, ({ one }) => ({
+  host: one(hosts, { fields: [hostHeartbeats.hostId], references: [hosts.id] }),
+}));
+
+export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
+  user: one(user, { fields: [userPreferences.userId], references: [user.id] }),
 }));
