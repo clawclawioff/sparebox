@@ -1,7 +1,8 @@
 import { createAuthClient } from "better-auth/react";
 
 export const authClient = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+  // Use relative URL to avoid CORS issues
+  baseURL: typeof window !== "undefined" ? window.location.origin : "https://sparebox.dev",
 });
 
 export const { signIn, signUp, signOut, useSession } = authClient;
