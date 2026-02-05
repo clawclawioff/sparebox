@@ -2,22 +2,23 @@
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { useSearchParams, useRouter } from "next/navigation";
+import { signUp } from "@/lib/auth-client";
 import { Server, Cpu } from "lucide-react";
 
 function SignupForm() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const initialRole = searchParams.get("role") || "";
-  
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [role, setRole] = useState<"host" | "user" | "">(
     initialRole === "host" || initialRole === "user" ? initialRole : ""
   );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,42 +30,20 @@ function SignupForm() {
     setLoading(true);
     setError("");
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
+    const { error } = await signUp.email({
       email,
       password,
-      options: {
-        data: {
-          role,
-        },
-      },
+      name,
     });
 
     if (error) {
-      setError(error.message);
+      setError(error.message || "Failed to create account");
       setLoading(false);
     } else {
-      setSuccess(true);
+      // TODO: Update user role in database
+      router.push("/dashboard");
     }
   };
-
-  if (success) {
-    return (
-      <div className="w-full max-w-md">
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 text-center">
-          <div className="w-12 h-12 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Check your email</h1>
-          <p className="text-gray-400">
-            We&apos;ve sent a confirmation link to <strong className="text-white">{email}</strong>
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="w-full max-w-md">
@@ -88,7 +67,9 @@ function SignupForm() {
                     : "border-gray-700 bg-gray-800 hover:border-gray-600"
                 }`}
               >
-                <Server className={`w-5 h-5 mb-2 ${role === "host" ? "text-emerald-400" : "text-gray-400"}`} />
+                <Server
+                  className={`w-5 h-5 mb-2 ${role === "host" ? "text-emerald-400" : "text-gray-400"}`}
+                />
                 <div className={`font-medium ${role === "host" ? "text-white" : "text-gray-300"}`}>
                   Host agents
                 </div>
@@ -103,13 +84,29 @@ function SignupForm() {
                     : "border-gray-700 bg-gray-800 hover:border-gray-600"
                 }`}
               >
-                <Cpu className={`w-5 h-5 mb-2 ${role === "user" ? "text-emerald-400" : "text-gray-400"}`} />
+                <Cpu
+                  className={`w-5 h-5 mb-2 ${role === "user" ? "text-emerald-400" : "text-gray-400"}`}
+                />
                 <div className={`font-medium ${role === "user" ? "text-white" : "text-gray-300"}`}>
                   Deploy agents
                 </div>
                 <div className="text-xs text-gray-500 mt-1">Run your AI</div>
               </button>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              placeholder="Your name"
+              required
+            />
           </div>
 
           <div>
@@ -125,6 +122,7 @@ function SignupForm() {
               required
             />
           </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">
               Password
@@ -141,9 +139,7 @@ function SignupForm() {
             <p className="text-xs text-gray-500 mt-1">Minimum 8 characters</p>
           </div>
 
-          {error && (
-            <p className="text-red-400 text-sm">{error}</p>
-          )}
+          {error && <p className="text-red-400 text-sm">{error}</p>}
 
           <button
             type="submit"
@@ -167,19 +163,21 @@ function SignupForm() {
 
 export default function SignupPage() {
   return (
-    <Suspense fallback={
-      <div className="w-full max-w-md">
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 animate-pulse">
-          <div className="h-8 bg-gray-800 rounded w-3/4 mb-4"></div>
-          <div className="h-4 bg-gray-800 rounded w-1/2 mb-6"></div>
-          <div className="space-y-4">
-            <div className="h-24 bg-gray-800 rounded"></div>
-            <div className="h-10 bg-gray-800 rounded"></div>
-            <div className="h-10 bg-gray-800 rounded"></div>
+    <Suspense
+      fallback={
+        <div className="w-full max-w-md">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 animate-pulse">
+            <div className="h-8 bg-gray-800 rounded w-3/4 mb-4"></div>
+            <div className="h-4 bg-gray-800 rounded w-1/2 mb-6"></div>
+            <div className="space-y-4">
+              <div className="h-24 bg-gray-800 rounded"></div>
+              <div className="h-10 bg-gray-800 rounded"></div>
+              <div className="h-10 bg-gray-800 rounded"></div>
+            </div>
           </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <SignupForm />
     </Suspense>
   );

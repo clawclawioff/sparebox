@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { signIn } from "@/lib/auth-client";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -17,14 +17,13 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error } = await signIn.email({
       email,
       password,
     });
 
     if (error) {
-      setError(error.message);
+      setError(error.message || "Invalid credentials");
       setLoading(false);
     } else {
       router.push("/dashboard");
@@ -65,9 +64,7 @@ export default function LoginPage() {
             />
           </div>
 
-          {error && (
-            <p className="text-red-400 text-sm">{error}</p>
-          )}
+          {error && <p className="text-red-400 text-sm">{error}</p>}
 
           <button
             type="submit"
