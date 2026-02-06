@@ -18,6 +18,10 @@ export const metadata: Metadata = {
     title: "Sparebox",
     description: "Turn spare hardware into AI infrastructure",
   },
+  icons: {
+    icon: "/logo-icon.svg",
+    apple: "/logo-icon.svg",
+  },
 };
 
 export default function RootLayout({

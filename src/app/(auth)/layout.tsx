@@ -1,6 +1,5 @@
-import Link from "next/link";
-import { Box } from "lucide-react";
 import { requireGuest } from "@/lib/auth/guards";
+import { SpareboxLogo } from "@/components/sparebox-logo";
 
 /**
  * Auth Layout - For login/signup pages
@@ -23,12 +22,9 @@ export default async function AuthLayout({
       <div className="fixed inset-0 gradient-page pointer-events-none" />
       
       <nav className="relative z-10 p-6">
-        <Link href="/" className="flex items-center gap-2 w-fit">
-          <div className="w-8 h-8 gradient-brand rounded-lg flex items-center justify-center shadow-sm">
-            <Box className="w-5 h-5 text-primary-foreground" />
-          </div>
-          <span className="font-bold text-xl text-foreground">Sparebox</span>
-        </Link>
+        <div className="w-fit">
+          <SpareboxLogo variant="full" size="md" href="/" />
+        </div>
       </nav>
       <div className="relative z-10 flex-1 flex items-center justify-center p-6">
         {children}

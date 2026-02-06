@@ -17,6 +17,7 @@ import {
   X,
   ChevronDown,
 } from "lucide-react";
+import { SpareboxLogo } from "@/components/sparebox-logo";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -127,12 +128,7 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center justify-between h-16 px-6 border-b">
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg flex items-center justify-center shadow-sm">
-                <span className="text-white font-bold text-lg">S</span>
-              </div>
-              <span className="font-semibold">Sparebox</span>
-            </Link>
+            <SpareboxLogo variant="full" size="md" href="/dashboard" />
             <button
               onClick={() => setSidebarOpen(false)}
               className="lg:hidden text-muted-foreground hover:text-foreground"
@@ -225,12 +221,7 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
             <Menu className="w-6 h-6" />
           </button>
           <div className="flex-1 flex justify-center">
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg flex items-center justify-center shadow-sm">
-                <span className="text-white font-bold">S</span>
-              </div>
-              <span className="font-semibold">Sparebox</span>
-            </Link>
+            <SpareboxLogo variant="icon" size="md" href="/dashboard" />
           </div>
           <div className="w-6" /> {/* Spacer for centering */}
         </header>

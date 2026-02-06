@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Server, Check, ArrowRight, Cpu, HardDrive, Wifi, Box } from "lucide-react";
+import { Server, Check, ArrowRight, Cpu, HardDrive, Wifi } from "lucide-react";
+import { SpareboxLogo } from "@/components/sparebox-logo";
 
 export default function PricingPage() {
   return (
@@ -20,12 +21,7 @@ export default function PricingPage() {
 
       {/* Nav */}
       <nav className="relative z-10 flex items-center justify-between px-6 py-4 max-w-6xl mx-auto">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg flex items-center justify-center shadow-sm">
-            <Box className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-bold text-xl">Sparebox</span>
-        </Link>
+        <SpareboxLogo variant="full" size="md" href="/" />
         <div className="flex items-center gap-4">
           <Link href="/login" className="text-stone-500 hover:text-stone-900 transition">
             Log in
@@ -220,10 +216,7 @@ export default function PricingPage() {
       <footer className="relative z-10 border-t border-stone-200 py-8">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-orange-600 to-orange-700 rounded flex items-center justify-center">
-              <Box className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-semibold text-stone-900">Sparebox</span>
+            <SpareboxLogo variant="full" size="sm" />
           </div>
           <p className="text-stone-400 text-sm">
             © 2026 Sparebox. Open infrastructure for personal AI.

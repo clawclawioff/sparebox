@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Server, Cpu, Shield, DollarSign, Zap, Globe, Users, Box, Check } from "lucide-react";
+import { ArrowRight, Server, Cpu, Shield, DollarSign, Zap, Globe, Users, Check } from "lucide-react";
+import { SpareboxLogo } from "@/components/sparebox-logo";
 import { trpc } from "@/lib/trpc";
 
 export default function Home() {
@@ -27,10 +28,7 @@ export default function Home() {
           animate={{ opacity: 1, x: 0 }}
           className="flex items-center gap-2"
         >
-          <div className="w-8 h-8 bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg flex items-center justify-center shadow-sm">
-            <Box className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-bold text-xl text-stone-800">Sparebox</span>
+          <SpareboxLogo variant="full" size="md" href="/" />
         </motion.div>
         <motion.div
           initial={{ opacity: 0, x: 20 }}
@@ -290,10 +288,7 @@ export default function Home() {
       <footer className="relative z-10 border-t border-stone-200 bg-white/50 py-8">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-orange-600 to-orange-700 rounded flex items-center justify-center">
-              <Box className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-semibold text-stone-800">Sparebox</span>
+            <SpareboxLogo variant="full" size="sm" />
           </div>
           <p className="text-stone-500 text-sm">
             © 2026 Sparebox. Open infrastructure for personal AI.
