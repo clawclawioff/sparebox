@@ -128,8 +128,8 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
           {/* Logo */}
           <div className="flex items-center justify-between h-16 px-6 border-b">
             <Link href="/dashboard" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-lg flex items-center justify-center">
-                <span className="text-black font-bold text-lg">S</span>
+              <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-cyan-400 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">S</span>
               </div>
               <span className="font-semibold">Sparebox</span>
             </Link>
@@ -226,8 +226,8 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
           </button>
           <div className="flex-1 flex justify-center">
             <Link href="/dashboard" className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-lg flex items-center justify-center">
-                <span className="text-black font-bold">S</span>
+              <div className="w-7 h-7 bg-gradient-to-br from-violet-500 to-cyan-400 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold">S</span>
               </div>
               <span className="font-semibold">Sparebox</span>
             </Link>
