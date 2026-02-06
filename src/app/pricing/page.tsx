@@ -23,6 +23,9 @@ export default function PricingPage() {
       <nav className="relative z-10 flex items-center justify-between px-6 py-4 max-w-6xl mx-auto">
         <SpareboxLogo variant="full" size="md" href="/" />
         <div className="flex items-center gap-4">
+          <Link href="/blog" className="text-stone-500 hover:text-stone-900 transition">
+            Blog
+          </Link>
           <Link href="/login" className="text-stone-500 hover:text-stone-900 transition">
             Log in
           </Link>

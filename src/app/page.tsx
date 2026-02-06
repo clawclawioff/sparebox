@@ -38,6 +38,9 @@ export default function Home() {
           <Link href="/pricing" className="text-stone-600 hover:text-stone-900 transition">
             Pricing
           </Link>
+          <Link href="/blog" className="text-stone-600 hover:text-stone-900 transition">
+            Blog
+          </Link>
           <Link href="/login" className="text-stone-600 hover:text-stone-900 transition">
             Log in
           </Link>
