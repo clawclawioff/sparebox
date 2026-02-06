@@ -21,10 +21,10 @@ import {
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
-    active: "bg-emerald-500/10 text-emerald-400",
-    pending: "bg-yellow-500/10 text-yellow-400",
-    inactive: "bg-zinc-500/10 text-zinc-400",
-    suspended: "bg-red-500/10 text-red-400",
+    active: "status-success",
+    pending: "status-warning",
+    inactive: "bg-muted text-muted-foreground",
+    suspended: "status-error",
   };
 
   return (
@@ -36,12 +36,12 @@ function StatusBadge({ status }: { status: string }) {
       <span
         className={`w-2 h-2 rounded-full ${
           status === "active"
-            ? "bg-emerald-400"
+            ? "bg-green-600"
             : status === "pending"
-            ? "bg-yellow-400"
+            ? "bg-yellow-500"
             : status === "inactive"
-            ? "bg-zinc-400"
-            : "bg-red-400"
+            ? "bg-muted-foreground"
+            : "bg-destructive"
         }`}
       />
       {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -61,16 +61,16 @@ function StatCard({
   icon: React.ElementType;
 }) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+    <div className="bg-card border border-border rounded-xl p-5">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-zinc-800 rounded-lg flex items-center justify-center">
-          <Icon className="w-5 h-5 text-emerald-400" />
+        <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+          <Icon className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <p className="text-xs text-zinc-400">{label}</p>
-          <p className="text-lg font-semibold text-white">{value}</p>
+          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className="text-lg font-semibold text-foreground">{value}</p>
           {sublabel && (
-            <p className="text-xs text-zinc-500">{sublabel}</p>
+            <p className="text-xs text-muted-foreground/70">{sublabel}</p>
           )}
         </div>
       </div>
@@ -82,10 +82,10 @@ function UsageBar({ label, value, color }: { label: string; value: number; color
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-sm">
-        <span className="text-zinc-400">{label}</span>
-        <span className="text-white font-medium">{value.toFixed(1)}%</span>
+        <span className="text-muted-foreground">{label}</span>
+        <span className="text-foreground font-medium">{value.toFixed(1)}%</span>
       </div>
-      <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+      <div className="h-2 bg-muted rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all ${color}`}
           style={{ width: `${Math.min(100, value)}%` }}
@@ -97,11 +97,11 @@ function UsageBar({ label, value, color }: { label: string; value: number; color
 
 function AgentStatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
-    running: "text-emerald-400",
-    stopped: "text-zinc-400",
-    pending: "text-yellow-400",
-    deploying: "text-blue-400",
-    failed: "text-red-400",
+    running: "text-green-600",
+    stopped: "text-muted-foreground",
+    pending: "text-yellow-600",
+    deploying: "text-blue-600",
+    failed: "text-destructive",
   };
 
   return (
@@ -109,12 +109,12 @@ function AgentStatusBadge({ status }: { status: string }) {
       <span
         className={`w-1.5 h-1.5 rounded-full ${
           status === "running"
-            ? "bg-emerald-400"
+            ? "bg-green-600"
             : status === "stopped"
-            ? "bg-zinc-400"
+            ? "bg-muted-foreground"
             : status === "pending" || status === "deploying"
-            ? "bg-yellow-400"
-            : "bg-red-400"
+            ? "bg-yellow-500"
+            : "bg-destructive"
         }`}
       />
       {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -179,25 +179,25 @@ export default function HostDetailsPage() {
   const formatDate = (date: Date | string) => new Date(date).toLocaleDateString();
 
   const getHeartbeatStatus = () => {
-    if (!host?.lastHeartbeat) return { status: "Never connected", color: "text-zinc-500" };
+    if (!host?.lastHeartbeat) return { status: "Never connected", color: "text-muted-foreground/70" };
     const lastBeat = new Date(host.lastHeartbeat);
     const minutesAgo = Math.floor((Date.now() - lastBeat.getTime()) / 60000);
     
-    if (minutesAgo < 2) return { status: `${minutesAgo} min ago`, color: "text-emerald-400" };
-    if (minutesAgo < 5) return { status: `${minutesAgo} min ago`, color: "text-yellow-400" };
-    return { status: `${minutesAgo} min ago`, color: "text-red-400" };
+    if (minutesAgo < 2) return { status: `${minutesAgo} min ago`, color: "text-green-600" };
+    if (minutesAgo < 5) return { status: `${minutesAgo} min ago`, color: "text-yellow-600" };
+    return { status: `${minutesAgo} min ago`, color: "text-destructive" };
   };
 
   if (isLoading) {
     return (
       <div className="animate-pulse space-y-6">
-        <div className="h-8 w-48 bg-zinc-800 rounded" />
+        <div className="h-8 w-48 bg-muted rounded" />
         <div className="grid grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 bg-zinc-800 rounded-xl" />
+            <div key={i} className="h-24 bg-muted rounded-xl" />
           ))}
         </div>
-        <div className="h-64 bg-zinc-800 rounded-xl" />
+        <div className="h-64 bg-muted rounded-xl" />
       </div>
     );
   }
@@ -205,10 +205,10 @@ export default function HostDetailsPage() {
   if (!host) {
     return (
       <div className="text-center py-12">
-        <p className="text-zinc-400">Machine not found</p>
+        <p className="text-muted-foreground">Machine not found</p>
         <Link
           href="/dashboard/hosts"
-          className="text-emerald-400 hover:underline mt-2 inline-block"
+          className="text-primary hover:underline mt-2 inline-block"
         >
           Back to machines
         </Link>
@@ -222,7 +222,7 @@ export default function HostDetailsPage() {
     <div>
       <Link
         href="/dashboard/hosts"
-        className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white mb-6"
+        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Machines
@@ -237,10 +237,10 @@ export default function HostDetailsPage() {
                 type="text"
                 value={editForm.name}
                 onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                className="text-2xl font-bold bg-zinc-800 text-white px-3 py-1 rounded-lg border border-zinc-700 focus:border-emerald-500 focus:outline-none"
+                className="text-2xl font-bold bg-muted text-foreground px-3 py-1 rounded-lg border border-border focus:ring-ring focus:outline-none"
               />
             ) : (
-              <h1 className="text-2xl font-bold text-white">{host.name}</h1>
+              <h1 className="text-2xl font-bold text-foreground">{host.name}</h1>
             )}
             <StatusBadge status={host.status} />
           </div>
@@ -254,14 +254,14 @@ export default function HostDetailsPage() {
             <>
               <button
                 onClick={() => setIsEditing(false)}
-                className="px-4 py-2 text-zinc-400 hover:text-white transition-colors"
+                className="px-4 py-2 text-muted-foreground hover:text-foreground transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={updateHost.isPending}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-black font-medium rounded-lg transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg transition-colors"
               >
                 {updateHost.isPending ? "Saving..." : "Save"}
               </button>
@@ -270,7 +270,7 @@ export default function HostDetailsPage() {
             <>
               <button
                 onClick={handleEdit}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition-colors"
               >
                 <Pencil className="w-4 h-4" />
                 Edit
@@ -278,7 +278,7 @@ export default function HostDetailsPage() {
               <button
                 onClick={handleDelete}
                 disabled={deleteHost.isPending}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg transition-colors"
               >
                 <Trash2 className="w-4 h-4" />
                 Delete
@@ -310,78 +310,78 @@ export default function HostDetailsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Machine Info */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-          <h3 className="font-semibold text-white mb-4">Machine Info</h3>
+        <div className="bg-card border border-border rounded-xl p-6">
+          <h3 className="font-semibold text-foreground mb-4">Machine Info</h3>
           <div className="space-y-4 text-sm">
             <div className="flex items-start gap-3">
-              <Cpu className="w-4 h-4 text-zinc-500 mt-0.5" />
+              <Cpu className="w-4 h-4 text-muted-foreground mt-0.5" />
               <div>
-                <span className="text-zinc-400">Specs</span>
-                <p className="text-white">
+                <span className="text-muted-foreground">Specs</span>
+                <p className="text-foreground">
                   {host.cpuCores || "—"} cores • {host.ramGb || "—"}GB RAM • {host.storageGb || "—"}GB Storage
                 </p>
               </div>
             </div>
             <div className="flex items-start gap-3">
-              <Server className="w-4 h-4 text-zinc-500 mt-0.5" />
+              <Server className="w-4 h-4 text-muted-foreground mt-0.5" />
               <div>
-                <span className="text-zinc-400">Operating System</span>
-                <p className="text-white">{host.osInfo || "Not specified"}</p>
+                <span className="text-muted-foreground">Operating System</span>
+                <p className="text-foreground">{host.osInfo || "Not specified"}</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
-              <MapPin className="w-4 h-4 text-zinc-500 mt-0.5" />
+              <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
               <div>
-                <span className="text-zinc-400">Location</span>
-                <p className="text-white">
+                <span className="text-muted-foreground">Location</span>
+                <p className="text-foreground">
                   {[host.city, host.region, host.country].filter(Boolean).join(", ") || "Not specified"}
                 </p>
               </div>
             </div>
             <div className="flex items-start gap-3">
-              <DollarSign className="w-4 h-4 text-zinc-500 mt-0.5" />
+              <DollarSign className="w-4 h-4 text-muted-foreground mt-0.5" />
               <div>
-                <span className="text-zinc-400">Price</span>
+                <span className="text-muted-foreground">Price</span>
                 {isEditing ? (
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-zinc-400">$</span>
+                    <span className="text-muted-foreground">$</span>
                     <input
                       type="number"
                       value={(editForm.pricePerMonth / 100).toFixed(2)}
                       onChange={(e) =>
                         setEditForm({ ...editForm, pricePerMonth: Math.round(parseFloat(e.target.value) * 100) })
                       }
-                      className="w-24 bg-zinc-800 text-white px-2 py-1 rounded border border-zinc-700 focus:border-emerald-500 focus:outline-none"
+                      className="w-24 bg-muted text-foreground px-2 py-1 rounded border border-border focus:ring-ring focus:outline-none"
                       step="0.01"
                       min="5"
                       max="100"
                     />
-                    <span className="text-zinc-400">/month</span>
+                    <span className="text-muted-foreground">/month</span>
                   </div>
                 ) : (
-                  <p className="text-white">
+                  <p className="text-foreground">
                     {formatCurrency(host.pricePerMonth || 0)}/month{" "}
-                    <span className="text-zinc-500">(you receive {formatCurrency((host.pricePerMonth || 0) * 0.6)})</span>
+                    <span className="text-muted-foreground/70">(you receive {formatCurrency((host.pricePerMonth || 0) * 0.6)})</span>
                   </p>
                 )}
               </div>
             </div>
             <div className="flex items-start gap-3">
-              <Calendar className="w-4 h-4 text-zinc-500 mt-0.5" />
+              <Calendar className="w-4 h-4 text-muted-foreground mt-0.5" />
               <div>
-                <span className="text-zinc-400">Added</span>
-                <p className="text-white">{formatDate(host.createdAt)}</p>
+                <span className="text-muted-foreground">Added</span>
+                <p className="text-foreground">{formatDate(host.createdAt)}</p>
               </div>
             </div>
           </div>
 
           {isEditing && (
-            <div className="mt-4 pt-4 border-t border-zinc-800">
-              <label className="text-sm text-zinc-400">Description</label>
+            <div className="mt-4 pt-4 border-t border-border">
+              <label className="text-sm text-muted-foreground">Description</label>
               <textarea
                 value={editForm.description}
                 onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                className="w-full mt-1 bg-zinc-800 text-white px-3 py-2 rounded-lg border border-zinc-700 focus:border-emerald-500 focus:outline-none resize-none"
+                className="w-full mt-1 bg-muted text-foreground px-3 py-2 rounded-lg border border-border focus:ring-ring focus:outline-none resize-none"
                 rows={3}
                 placeholder="A brief description of your machine..."
               />
@@ -390,10 +390,10 @@ export default function HostDetailsPage() {
         </div>
 
         {/* System Metrics */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+        <div className="bg-card border border-border rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-white">System Metrics</h3>
-            <span className="text-xs text-zinc-500">Last 24h</span>
+            <h3 className="font-semibold text-foreground">System Metrics</h3>
+            <span className="text-xs text-muted-foreground/70">Last 24h</span>
           </div>
           
           {metrics?.latest ? (
@@ -401,7 +401,7 @@ export default function HostDetailsPage() {
               <UsageBar
                 label="CPU Usage"
                 value={metrics.latest.cpuUsage || 0}
-                color="bg-emerald-500"
+                color="bg-primary"
               />
               <UsageBar
                 label="RAM Usage"
@@ -413,20 +413,20 @@ export default function HostDetailsPage() {
                 value={metrics.latest.diskUsage || 0}
                 color="bg-purple-500"
               />
-              <div className="pt-2 border-t border-zinc-800">
+              <div className="pt-2 border-t border-border">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-zinc-400">Active Agents</span>
-                  <span className="text-white font-medium">{metrics.latest.agentCount || 0}</span>
+                  <span className="text-muted-foreground">Active Agents</span>
+                  <span className="text-foreground font-medium">{metrics.latest.agentCount || 0}</span>
                 </div>
               </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center py-8 text-center">
-              <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center mb-3">
-                <Activity className="w-6 h-6 text-zinc-500" />
+              <div className="w-12 h-12 bg-muted rounded-xl flex items-center justify-center mb-3">
+                <Activity className="w-6 h-6 text-muted-foreground" />
               </div>
-              <p className="text-zinc-400 text-sm">No metrics available</p>
-              <p className="text-zinc-500 text-xs mt-1">
+              <p className="text-muted-foreground text-sm">No metrics available</p>
+              <p className="text-muted-foreground/70 text-xs mt-1">
                 Metrics will appear once the host agent is installed and connected.
               </p>
             </div>
@@ -435,14 +435,14 @@ export default function HostDetailsPage() {
       </div>
 
       {/* Hosted Agents */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-        <h3 className="font-semibold text-white mb-4">Hosted Agents</h3>
+      <div className="bg-card border border-border rounded-xl p-6">
+        <h3 className="font-semibold text-foreground mb-4">Hosted Agents</h3>
         
         {stats?.agents && stats.agents.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-zinc-400 border-b border-zinc-800">
+                <tr className="text-left text-muted-foreground border-b border-border">
                   <th className="pb-3 font-medium">Agent</th>
                   <th className="pb-3 font-medium">Status</th>
                   <th className="pb-3 font-medium">Started</th>
@@ -451,20 +451,20 @@ export default function HostDetailsPage() {
               </thead>
               <tbody>
                 {stats.agents.map((agent) => (
-                  <tr key={agent.id} className="border-b border-zinc-800/50 last:border-0">
+                  <tr key={agent.id} className="border-b border-border/50 last:border-0">
                     <td className="py-3">
-                      <span className="text-white font-medium">{agent.name}</span>
-                      <span className="text-zinc-500 text-xs ml-2">
+                      <span className="text-foreground font-medium">{agent.name}</span>
+                      <span className="text-muted-foreground/70 text-xs ml-2">
                         {agent.id.slice(0, 8)}...
                       </span>
                     </td>
                     <td className="py-3">
                       <AgentStatusBadge status={agent.status} />
                     </td>
-                    <td className="py-3 text-zinc-400">
+                    <td className="py-3 text-muted-foreground">
                       {formatDate(agent.createdAt)}
                     </td>
-                    <td className="py-3 text-right text-emerald-400 font-medium">
+                    <td className="py-3 text-right text-primary font-medium">
                       {formatCurrency((host.pricePerMonth || 0) * 0.6)}/mo
                     </td>
                   </tr>
@@ -474,17 +474,17 @@ export default function HostDetailsPage() {
           </div>
         ) : (
           <div className="text-center py-8">
-            <div className="w-12 h-12 bg-zinc-800 rounded-xl flex items-center justify-center mx-auto mb-3">
-              <Bot className="w-6 h-6 text-zinc-500" />
+            <div className="w-12 h-12 bg-muted rounded-xl flex items-center justify-center mx-auto mb-3">
+              <Bot className="w-6 h-6 text-muted-foreground" />
             </div>
-            <p className="text-zinc-400">No agents hosted yet</p>
-            <p className="text-zinc-500 text-xs mt-1">
+            <p className="text-muted-foreground">No agents hosted yet</p>
+            <p className="text-muted-foreground/70 text-xs mt-1">
               Agents will appear here when users deploy to this machine.
             </p>
           </div>
         )}
         
-        <p className="text-xs text-zinc-500 mt-4 pt-4 border-t border-zinc-800">
+        <p className="text-xs text-muted-foreground/70 mt-4 pt-4 border-t border-border">
           Note: Agent details are private to their owners. You can only see basic status information.
         </p>
       </div>

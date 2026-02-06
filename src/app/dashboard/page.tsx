@@ -17,10 +17,10 @@ export default async function DashboardPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white">
+        <h1 className="text-2xl font-bold text-foreground">
           Welcome back{user.name ? `, ${user.name.split(" ")[0]}` : ""}
         </h1>
-        <p className="text-zinc-400 mt-1">
+        <p className="text-muted-foreground mt-1">
           {isHost
             ? "Manage your machines and track earnings"
             : "Deploy and monitor your AI agents"}

@@ -9,16 +9,16 @@ interface StatusBadgeProps {
 }
 
 const statusConfig: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; dotColor: string }> = {
-  running: { variant: "default", dotColor: "bg-emerald-400" },
-  active: { variant: "default", dotColor: "bg-emerald-400" },
-  online: { variant: "default", dotColor: "bg-emerald-400" },
-  stopped: { variant: "secondary", dotColor: "bg-zinc-400" },
-  offline: { variant: "secondary", dotColor: "bg-zinc-400" },
-  inactive: { variant: "secondary", dotColor: "bg-zinc-400" },
-  pending: { variant: "outline", dotColor: "bg-yellow-400" },
-  deploying: { variant: "outline", dotColor: "bg-blue-400" },
-  failed: { variant: "destructive", dotColor: "bg-red-400" },
-  suspended: { variant: "destructive", dotColor: "bg-red-400" },
+  running: { variant: "default", dotColor: "bg-green-600" },
+  active: { variant: "default", dotColor: "bg-green-600" },
+  online: { variant: "default", dotColor: "bg-green-600" },
+  stopped: { variant: "secondary", dotColor: "bg-muted-foreground" },
+  offline: { variant: "secondary", dotColor: "bg-muted-foreground" },
+  inactive: { variant: "secondary", dotColor: "bg-muted-foreground" },
+  pending: { variant: "outline", dotColor: "bg-yellow-500" },
+  deploying: { variant: "outline", dotColor: "bg-blue-500" },
+  failed: { variant: "destructive", dotColor: "bg-red-500" },
+  suspended: { variant: "destructive", dotColor: "bg-red-500" },
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {

@@ -18,11 +18,11 @@ import { useState } from "react";
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
-    running: "bg-emerald-500/10 text-emerald-400",
-    stopped: "bg-zinc-500/10 text-zinc-400",
-    pending: "bg-yellow-500/10 text-yellow-400",
-    deploying: "bg-blue-500/10 text-blue-400",
-    failed: "bg-red-500/10 text-red-400",
+    running: "status-success",
+    stopped: "bg-muted text-muted-foreground",
+    pending: "status-warning",
+    deploying: "bg-blue-500/10 text-blue-600",
+    failed: "status-error",
   };
 
   return (
@@ -34,12 +34,12 @@ function StatusBadge({ status }: { status: string }) {
       <span
         className={`w-2 h-2 rounded-full ${
           status === "running"
-            ? "bg-emerald-400"
+            ? "bg-green-600"
             : status === "stopped"
-            ? "bg-zinc-400"
+            ? "bg-muted-foreground"
             : status === "pending" || status === "deploying"
-            ? "bg-yellow-400"
-            : "bg-red-400"
+            ? "bg-yellow-500"
+            : "bg-destructive"
         }`}
       />
       {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -57,14 +57,14 @@ function StatCard({
   icon: React.ElementType;
 }) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+    <div className="bg-card border border-border rounded-xl p-5">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-zinc-800 rounded-lg flex items-center justify-center">
-          <Icon className="w-5 h-5 text-emerald-400" />
+        <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+          <Icon className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <p className="text-xs text-zinc-400">{label}</p>
-          <p className="text-lg font-semibold text-white">{value}</p>
+          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className="text-lg font-semibold text-foreground">{value}</p>
         </div>
       </div>
     </div>
@@ -119,13 +119,13 @@ export default function AgentDetailsPage() {
   if (isLoading) {
     return (
       <div className="animate-pulse space-y-6">
-        <div className="h-8 w-48 bg-zinc-800 rounded" />
+        <div className="h-8 w-48 bg-muted rounded" />
         <div className="grid grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 bg-zinc-800 rounded-xl" />
+            <div key={i} className="h-24 bg-muted rounded-xl" />
           ))}
         </div>
-        <div className="h-64 bg-zinc-800 rounded-xl" />
+        <div className="h-64 bg-muted rounded-xl" />
       </div>
     );
   }
@@ -133,10 +133,10 @@ export default function AgentDetailsPage() {
   if (!agent) {
     return (
       <div className="text-center py-12">
-        <p className="text-zinc-400">Agent not found</p>
+        <p className="text-muted-foreground">Agent not found</p>
         <Link
           href="/dashboard/agents"
-          className="text-emerald-400 hover:underline mt-2 inline-block"
+          className="text-primary hover:underline mt-2 inline-block"
         >
           Back to agents
         </Link>
@@ -152,7 +152,7 @@ export default function AgentDetailsPage() {
     <div>
       <Link
         href="/dashboard/agents"
-        className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white mb-6"
+        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Agents
@@ -162,10 +162,10 @@ export default function AgentDetailsPage() {
       <div className="flex items-start justify-between mb-8">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-white">{agent.name}</h1>
+            <h1 className="text-2xl font-bold text-foreground">{agent.name}</h1>
             <StatusBadge status={agent.status} />
           </div>
-          <p className="text-zinc-400 mt-1">
+          <p className="text-muted-foreground mt-1">
             {agent.lastActive
               ? `Last active ${new Date(agent.lastActive).toLocaleString()}`
               : "Never active"}
@@ -177,7 +177,7 @@ export default function AgentDetailsPage() {
             <button
               onClick={handleStop}
               disabled={stopAgent.isPending}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition-colors"
             >
               <Square className="w-4 h-4" />
               Stop
@@ -186,7 +186,7 @@ export default function AgentDetailsPage() {
             <button
               onClick={handleStart}
               disabled={startAgent.isPending}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-black font-medium rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg transition-colors"
             >
               <Play className="w-4 h-4" />
               Start
@@ -196,7 +196,7 @@ export default function AgentDetailsPage() {
           <button
             onClick={handleDelete}
             disabled={deleteAgent.isPending}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg transition-colors"
           >
             <Trash2 className="w-4 h-4" />
             Delete
@@ -231,8 +231,8 @@ export default function AgentDetailsPage() {
             onClick={() => setActiveTab(tab)}
             className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
               activeTab === tab
-                ? "bg-zinc-800 text-white"
-                : "text-zinc-400 hover:text-white"
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -244,61 +244,61 @@ export default function AgentDetailsPage() {
       {activeTab === "overview" && (
         <div className="space-y-6">
           {/* Machine Info */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-            <h3 className="font-semibold text-white mb-4">Host Information</h3>
+          <div className="bg-card border border-border rounded-xl p-6">
+            <h3 className="font-semibold text-foreground mb-4">Host Information</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <span className="text-zinc-400">Host</span>
-                <p className="text-white">{host?.name || "—"}</p>
+                <span className="text-muted-foreground">Host</span>
+                <p className="text-foreground">{host?.name || "—"}</p>
               </div>
               <div>
-                <span className="text-zinc-400">Location</span>
-                <p className="text-white">
+                <span className="text-muted-foreground">Location</span>
+                <p className="text-foreground">
                   {host?.city || host?.region || "Unknown"}
                 </p>
               </div>
               <div>
-                <span className="text-zinc-400">Started</span>
-                <p className="text-white">
+                <span className="text-muted-foreground">Started</span>
+                <p className="text-foreground">
                   {new Date(agent.createdAt).toLocaleDateString()}
                 </p>
               </div>
               <div>
-                <span className="text-zinc-400">Version</span>
-                <p className="text-white">{(agent as any).openclawVersion || "latest"}</p>
+                <span className="text-muted-foreground">Version</span>
+                <p className="text-foreground">{(agent as any).openclawVersion || "latest"}</p>
               </div>
             </div>
           </div>
 
           {/* Connection Info */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-            <h3 className="font-semibold text-white mb-4">Connection</h3>
+          <div className="bg-card border border-border rounded-xl p-6">
+            <h3 className="font-semibold text-foreground mb-4">Connection</h3>
             <div className="space-y-4">
               <div>
-                <span className="text-sm text-zinc-400">Gateway URL</span>
+                <span className="text-sm text-muted-foreground">Gateway URL</span>
                 <div className="flex items-center gap-2 mt-1">
-                  <code className="flex-1 bg-zinc-800 px-3 py-2 rounded-lg text-sm text-emerald-400 font-mono">
+                  <code className="flex-1 bg-muted px-3 py-2 rounded-lg text-sm text-primary font-mono">
                     {gatewayUrl}
                   </code>
                   <button
                     onClick={() => copyToClipboard(gatewayUrl)}
-                    className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
                   >
                     <Copy className="w-4 h-4" />
                   </button>
                 </div>
               </div>
               <div>
-                <span className="text-sm text-zinc-400">Dashboard</span>
+                <span className="text-sm text-muted-foreground">Dashboard</span>
                 <div className="flex items-center gap-2 mt-1">
-                  <code className="flex-1 bg-zinc-800 px-3 py-2 rounded-lg text-sm text-emerald-400 font-mono">
+                  <code className="flex-1 bg-muted px-3 py-2 rounded-lg text-sm text-primary font-mono">
                     {dashboardUrl}
                   </code>
                   <a
                     href={dashboardUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
                   >
                     <ExternalLink className="w-4 h-4" />
                   </a>
@@ -310,15 +310,15 @@ export default function AgentDetailsPage() {
       )}
 
       {activeTab === "logs" && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+        <div className="bg-card border border-border rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-white">Logs (Last 100 lines)</h3>
-            <button className="text-sm text-emerald-400 hover:underline">
+            <h3 className="font-semibold text-foreground">Logs (Last 100 lines)</h3>
+            <button className="text-sm text-primary hover:underline">
               Download Full
             </button>
           </div>
-          <div className="bg-zinc-950 rounded-lg p-4 font-mono text-xs text-zinc-400 h-80 overflow-y-auto">
-            <p className="text-zinc-500">
+          <div className="bg-muted rounded-lg p-4 font-mono text-xs text-muted-foreground h-80 overflow-y-auto">
+            <p className="text-muted-foreground/70">
               Logs will appear here when the agent is running...
             </p>
             {/* TODO: Implement real-time logs */}
@@ -327,14 +327,14 @@ export default function AgentDetailsPage() {
       )}
 
       {activeTab === "config" && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+        <div className="bg-card border border-border rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-white">Configuration</h3>
-            <button className="text-sm text-emerald-400 hover:underline">
+            <h3 className="font-semibold text-foreground">Configuration</h3>
+            <button className="text-sm text-primary hover:underline">
               Edit
             </button>
           </div>
-          <div className="bg-zinc-950 rounded-lg p-4 font-mono text-xs text-zinc-300 h-80 overflow-y-auto">
+          <div className="bg-muted rounded-lg p-4 font-mono text-xs text-foreground h-80 overflow-y-auto">
             <pre>
               {agent.config ||
                 `# openclaw.yaml

@@ -2,29 +2,37 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Server, Check, ArrowRight, Cpu, HardDrive, Wifi } from "lucide-react";
+import { Server, Check, ArrowRight, Cpu, HardDrive, Wifi, Box } from "lucide-react";
 
 export default function PricingPage() {
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      {/* Background */}
-      <div className="fixed inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-cyan-500/5 pointer-events-none" />
+    <div className="min-h-screen bg-amber-50 text-stone-900 overflow-hidden">
+      {/* Subtle warm gradient background */}
+      <div className="fixed inset-0 bg-gradient-to-b from-orange-50 via-amber-50 to-amber-100/50 pointer-events-none" />
+
+      {/* Subtle texture */}
+      <div
+        className="fixed inset-0 pointer-events-none opacity-[0.03]"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000000' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+        }}
+      />
 
       {/* Nav */}
       <nav className="relative z-10 flex items-center justify-between px-6 py-4 max-w-6xl mx-auto">
         <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-emerald-400 to-cyan-400 rounded-lg flex items-center justify-center">
-            <Server className="w-5 h-5 text-gray-900" />
+          <div className="w-8 h-8 bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg flex items-center justify-center shadow-sm">
+            <Box className="w-5 h-5 text-white" />
           </div>
           <span className="font-bold text-xl">Sparebox</span>
         </Link>
         <div className="flex items-center gap-4">
-          <Link href="/login" className="text-gray-400 hover:text-white transition">
+          <Link href="/login" className="text-stone-500 hover:text-stone-900 transition">
             Log in
           </Link>
           <Link
             href="/signup"
-            className="bg-gradient-to-r from-emerald-500 to-cyan-500 px-4 py-2 rounded-lg font-medium"
+            className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm hover:shadow-md transition"
           >
             Get Started
           </Link>
@@ -38,10 +46,10 @@ export default function PricingPage() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-16"
         >
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">
+          <h1 className="text-4xl md:text-5xl font-bold mb-4 text-stone-900">
             Simple, transparent pricing
           </h1>
-          <p className="text-xl text-gray-400 max-w-2xl mx-auto">
+          <p className="text-xl text-stone-500 max-w-2xl mx-auto">
             Whether you&apos;re hosting or deploying, our pricing is straightforward.
             Hosts keep 60% of every dollar.
           </p>
@@ -54,22 +62,22 @@ export default function PricingPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-white/[0.03] border border-white/10 rounded-2xl p-8"
+            className="bg-white border border-stone-200 rounded-2xl p-8 shadow-sm"
           >
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center">
-                <Cpu className="w-5 h-5 text-cyan-400" />
+              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                <Cpu className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <h2 className="font-semibold text-lg">For Users</h2>
-                <p className="text-gray-500 text-sm">Deploy AI agents</p>
+                <h2 className="font-semibold text-lg text-stone-900">For Users</h2>
+                <p className="text-stone-500 text-sm">Deploy AI agents</p>
               </div>
             </div>
 
             <div className="mb-6">
-              <span className="text-4xl font-bold">$10</span>
-              <span className="text-gray-400"> - $15/mo</span>
-              <p className="text-gray-500 text-sm mt-1">per agent, varies by host</p>
+              <span className="text-4xl font-bold text-stone-900">$10</span>
+              <span className="text-stone-500"> - $15/mo</span>
+              <p className="text-stone-400 text-sm mt-1">per agent, varies by host</p>
             </div>
 
             <ul className="space-y-3 mb-8">
@@ -82,7 +90,7 @@ export default function PricingPage() {
 
             <Link
               href="/signup?role=user"
-              className="block w-full text-center bg-white/5 hover:bg-white/10 border border-white/10 py-3 rounded-xl font-medium transition"
+              className="block w-full text-center bg-stone-100 hover:bg-stone-200 border border-stone-200 text-stone-900 py-3 rounded-xl font-medium transition"
             >
               Deploy an Agent
             </Link>
@@ -93,26 +101,26 @@ export default function PricingPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-gradient-to-b from-emerald-500/10 to-transparent border border-emerald-500/20 rounded-2xl p-8 relative overflow-hidden"
+            className="bg-gradient-to-b from-orange-50 to-white border border-orange-200 rounded-2xl p-8 relative overflow-hidden shadow-sm"
           >
-            <div className="absolute top-4 right-4 bg-emerald-500/20 text-emerald-400 text-xs font-medium px-2 py-1 rounded-full">
+            <div className="absolute top-4 right-4 bg-orange-100 text-orange-700 text-xs font-medium px-2 py-1 rounded-full">
               Earn Money
             </div>
 
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-emerald-500/20 rounded-xl flex items-center justify-center">
-                <HardDrive className="w-5 h-5 text-emerald-400" />
+              <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center">
+                <HardDrive className="w-5 h-5 text-orange-700" />
               </div>
               <div>
-                <h2 className="font-semibold text-lg">For Hosts</h2>
-                <p className="text-gray-500 text-sm">Monetize hardware</p>
+                <h2 className="font-semibold text-lg text-stone-900">For Hosts</h2>
+                <p className="text-stone-500 text-sm">Monetize hardware</p>
               </div>
             </div>
 
             <div className="mb-6">
-              <span className="text-4xl font-bold text-emerald-400">60%</span>
-              <span className="text-gray-400"> of subscription</span>
-              <p className="text-gray-500 text-sm mt-1">$6-9/mo per agent you host</p>
+              <span className="text-4xl font-bold text-orange-700">60%</span>
+              <span className="text-stone-500"> of subscription</span>
+              <p className="text-stone-400 text-sm mt-1">$6-9/mo per agent you host</p>
             </div>
 
             <ul className="space-y-3 mb-8">
@@ -125,7 +133,7 @@ export default function PricingPage() {
 
             <Link
               href="/signup?role=host"
-              className="group block w-full text-center bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 py-3 rounded-xl font-medium transition"
+              className="group block w-full text-center bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-500 hover:to-orange-600 text-white py-3 rounded-xl font-medium transition shadow-sm hover:shadow-md"
             >
               <span className="flex items-center justify-center gap-2">
                 Become a Host
@@ -142,7 +150,7 @@ export default function PricingPage() {
           transition={{ delay: 0.4 }}
           className="mt-20 max-w-4xl mx-auto"
         >
-          <h2 className="text-2xl font-bold text-center mb-8">Host Requirements</h2>
+          <h2 className="text-2xl font-bold text-center mb-8 text-stone-900">Host Requirements</h2>
           <div className="grid sm:grid-cols-3 gap-6">
             <RequirementCard
               icon={<Cpu className="w-6 h-6" />}
@@ -169,7 +177,7 @@ export default function PricingPage() {
           transition={{ delay: 0.5 }}
           className="mt-20 max-w-3xl mx-auto"
         >
-          <h2 className="text-2xl font-bold text-center mb-8">FAQ</h2>
+          <h2 className="text-2xl font-bold text-center mb-8 text-stone-900">FAQ</h2>
           <div className="space-y-4">
             <FAQItem
               question="How do host payouts work?"
@@ -197,10 +205,10 @@ export default function PricingPage() {
           transition={{ delay: 0.6 }}
           className="mt-20 text-center"
         >
-          <p className="text-gray-400 mb-4">Ready to join the network?</p>
+          <p className="text-stone-500 mb-4">Ready to join the network?</p>
           <Link
             href="/signup"
-            className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 px-8 py-3 rounded-xl font-medium transition"
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-500 hover:to-orange-600 text-white px-8 py-3 rounded-xl font-medium transition shadow-sm hover:shadow-md"
           >
             Get Started Free
             <ArrowRight className="w-5 h-5" />
@@ -209,15 +217,15 @@ export default function PricingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-white/5 py-8">
+      <footer className="relative z-10 border-t border-stone-200 py-8">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-emerald-400 to-cyan-400 rounded flex items-center justify-center">
-              <Server className="w-4 h-4 text-gray-900" />
+            <div className="w-6 h-6 bg-gradient-to-br from-orange-600 to-orange-700 rounded flex items-center justify-center">
+              <Box className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold">Sparebox</span>
+            <span className="font-semibold text-stone-900">Sparebox</span>
           </div>
-          <p className="text-gray-500 text-sm">
+          <p className="text-stone-400 text-sm">
             © 2026 Sparebox. Open infrastructure for personal AI.
           </p>
         </div>
@@ -228,8 +236,8 @@ export default function PricingPage() {
 
 function PricingFeature({ children }: { children: React.ReactNode }) {
   return (
-    <li className="flex items-center gap-2 text-gray-300">
-      <Check className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+    <li className="flex items-center gap-2 text-stone-600">
+      <Check className="w-5 h-5 text-orange-600 flex-shrink-0" />
       {children}
     </li>
   );
@@ -245,21 +253,21 @@ function RequirementCard({
   description: string;
 }) {
   return (
-    <div className="bg-white/[0.03] border border-white/5 rounded-xl p-6 text-center">
-      <div className="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-400 mx-auto mb-3">
+    <div className="bg-white border border-stone-200 rounded-xl p-6 text-center shadow-sm">
+      <div className="w-12 h-12 bg-orange-50 rounded-xl flex items-center justify-center text-orange-700 mx-auto mb-3">
         {icon}
       </div>
-      <h3 className="font-semibold mb-1">{title}</h3>
-      <p className="text-gray-500 text-sm">{description}</p>
+      <h3 className="font-semibold mb-1 text-stone-900">{title}</h3>
+      <p className="text-stone-500 text-sm">{description}</p>
     </div>
   );
 }
 
 function FAQItem({ question, answer }: { question: string; answer: string }) {
   return (
-    <div className="bg-white/[0.03] border border-white/5 rounded-xl p-6">
-      <h3 className="font-semibold mb-2">{question}</h3>
-      <p className="text-gray-400 text-sm">{answer}</p>
+    <div className="bg-white border border-stone-200 rounded-xl p-6 shadow-sm">
+      <h3 className="font-semibold mb-2 text-stone-900">{question}</h3>
+      <p className="text-stone-500 text-sm">{answer}</p>
     </div>
   );
 }
