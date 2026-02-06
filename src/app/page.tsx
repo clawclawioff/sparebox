@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Server, Cpu, Shield, DollarSign, Zap, Globe, Users, Box } from "lucide-react";
+import { ArrowRight, Server, Cpu, Shield, DollarSign, Zap, Globe, Users, Box, Check } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 
 export default function Home() {
   return (
@@ -88,6 +90,16 @@ export default function Home() {
             The P2P marketplace for AI compute. Hosts earn passive income from idle hardware. 
             Users deploy AI agents in minutes. No DevOps required.
           </motion.p>
+
+          {/* Waitlist */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            className="max-w-md mx-auto mb-8"
+          >
+            <WaitlistForm />
+          </motion.div>
 
           {/* CTAs */}
           <motion.div
@@ -375,5 +387,56 @@ function StepCard({
       <h3 className="font-semibold text-lg text-stone-900 mb-2">{title}</h3>
       <p className="text-stone-600 text-sm leading-relaxed">{description}</p>
     </motion.div>
+  );
+}
+
+function WaitlistForm() {
+  const [email, setEmail] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  const joinMutation = trpc.waitlist.join.useMutation({
+    onSuccess: () => {
+      setSubmitted(true);
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+    joinMutation.mutate({ email, source: "landing" });
+  };
+
+  if (submitted) {
+    return (
+      <div className="flex items-center justify-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-xl py-3 px-4">
+        <Check className="w-5 h-5" />
+        <span className="font-medium">You&apos;re on the list!</span>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-sm text-stone-500 mb-3 text-center">
+        Join the waitlist — be first to know when we launch.
+      </p>
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          required
+          className="flex-1 bg-white border border-stone-300 rounded-xl px-4 py-2.5 text-stone-900 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+        />
+        <button
+          type="submit"
+          disabled={joinMutation.isPending}
+          className="bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl font-medium transition shadow-sm whitespace-nowrap"
+        >
+          {joinMutation.isPending ? "..." : "Join"}
+        </button>
+      </form>
+    </div>
   );
 }

@@ -223,6 +223,15 @@ export const userPreferences = pgTable("user_preferences", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Waitlist (email capture for early access)
+export const waitlist = pgTable("waitlist", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  email: text("email").notNull().unique(),
+  role: text("role"), // "host" or "user" — optional
+  source: text("source").default("landing"), // where they signed up from
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // ============================================
 // RELATIONS
 // ============================================

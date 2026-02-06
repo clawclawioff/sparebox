@@ -1,6 +1,7 @@
 import { requireAuth } from "@/lib/auth/guards";
 import { UserDashboard } from "@/components/user-dashboard";
 import { HostDashboard } from "@/components/host-dashboard";
+import { Rocket } from "lucide-react";
 
 /**
  * Dashboard Overview Page
@@ -16,6 +17,20 @@ export default async function DashboardPage() {
 
   return (
     <div>
+      {/* Early Access Banner */}
+      <div className="mb-6 bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-start gap-3">
+        <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+          <Rocket className="w-4 h-4 text-primary" />
+        </div>
+        <div>
+          <p className="font-medium text-foreground">Early Access</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Sparebox is in early access. We&apos;re building fast — hosting and deployment will go live soon.
+            Thanks for being here early!
+          </p>
+        </div>
+      </div>
+
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-foreground">
           Welcome back{user.name ? `, ${user.name.split(" ")[0]}` : ""}
