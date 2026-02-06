@@ -2,10 +2,19 @@
 
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
+import { useState } from "react";
 import { Server, MapPin, Cpu, HardDrive, Activity } from "lucide-react";
 
 export default function BrowseHostsPage() {
-  const { data: hosts, isLoading } = trpc.hosts.listAvailable.useQuery();
+  const [region, setRegion] = useState<string>("");
+  const [minRam, setMinRam] = useState<string>("");
+  const [maxPrice, setMaxPrice] = useState<string>("");
+
+  const { data: hosts, isLoading } = trpc.hosts.listAvailable.useQuery({
+    region: region || undefined,
+    minRam: minRam ? parseInt(minRam) : undefined,
+    maxPrice: maxPrice ? parseInt(maxPrice) * 100 : undefined, // convert dollars to cents
+  });
 
   return (
     <div>
@@ -16,26 +25,50 @@ export default function BrowseHostsPage() {
         </p>
       </div>
 
-      {/* Filters - TODO: implement */}
-      <div className="flex gap-4 mb-6">
-        <select className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
+      {/* Filters */}
+      <div className="flex flex-wrap gap-4 mb-6">
+        <select 
+          value={region}
+          onChange={(e) => setRegion(e.target.value)}
+          className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        >
           <option value="">Any Region</option>
-          <option value="us">United States</option>
-          <option value="eu">Europe</option>
-          <option value="asia">Asia</option>
+          <option value="us-east">US East</option>
+          <option value="us-west">US West</option>
+          <option value="eu-west">EU West</option>
+          <option value="eu-central">EU Central</option>
+          <option value="asia-pacific">Asia Pacific</option>
         </select>
-        <select className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
+        <select 
+          value={minRam}
+          onChange={(e) => setMinRam(e.target.value)}
+          className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        >
           <option value="">Any RAM</option>
           <option value="8">8GB+</option>
           <option value="16">16GB+</option>
           <option value="32">32GB+</option>
+          <option value="64">64GB+</option>
         </select>
-        <select className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
+        <select 
+          value={maxPrice}
+          onChange={(e) => setMaxPrice(e.target.value)}
+          className="bg-card border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        >
           <option value="">Any Price</option>
           <option value="10">Under $10/mo</option>
           <option value="20">Under $20/mo</option>
           <option value="50">Under $50/mo</option>
+          <option value="100">Under $100/mo</option>
         </select>
+        {(region || minRam || maxPrice) && (
+          <button
+            onClick={() => { setRegion(""); setMinRam(""); setMaxPrice(""); }}
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       {isLoading ? (

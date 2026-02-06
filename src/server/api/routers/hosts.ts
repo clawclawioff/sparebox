@@ -109,25 +109,46 @@ export const hostsRouter = router({
     }),
 
   // List all available hosts (for users looking to deploy)
-  listAvailable: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.query.hosts.findMany({
-      where: eq(hosts.status, "active"),
-      orderBy: (hosts, { asc }) => [asc(hosts.pricePerMonth)],
-      columns: {
-        id: true,
-        name: true,
-        description: true,
-        cpuCores: true,
-        ramGb: true,
-        storageGb: true,
-        region: true,
-        country: true,
-        city: true,
-        pricePerMonth: true,
-        uptimePercent: true,
-      },
-    });
-  }),
+  listAvailable: protectedProcedure
+    .input(
+      z.object({
+        region: z.string().optional(),
+        minRam: z.number().int().positive().optional(),
+        maxPrice: z.number().int().positive().optional(),
+      }).optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const filters = input || {};
+      const conditions = [eq(hosts.status, "active")];
+
+      if (filters.region) {
+        conditions.push(eq(hosts.region, filters.region));
+      }
+      if (filters.minRam) {
+        conditions.push(gte(hosts.ramGb, filters.minRam));
+      }
+      if (filters.maxPrice) {
+        conditions.push(sql`${hosts.pricePerMonth} <= ${filters.maxPrice}`);
+      }
+
+      return ctx.db.query.hosts.findMany({
+        where: and(...conditions),
+        orderBy: (hosts, { asc }) => [asc(hosts.pricePerMonth)],
+        columns: {
+          id: true,
+          name: true,
+          description: true,
+          cpuCores: true,
+          ramGb: true,
+          storageGb: true,
+          region: true,
+          country: true,
+          city: true,
+          pricePerMonth: true,
+          uptimePercent: true,
+        },
+      });
+    }),
 
   // Get host stats (earnings, agent count, etc.)
   getStats: protectedProcedure
