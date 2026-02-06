@@ -67,7 +67,6 @@ function ProfileTab({ utils }: { utils: ReturnType<typeof trpc.useUtils> }) {
 
   const [name, setName] = useState("");
   const [profileSaved, setProfileSaved] = useState(false);
-  const [showRoleConfirm, setShowRoleConfirm] = useState(false);
 
   // Sync name from query data
   useEffect(() => {
@@ -84,27 +83,10 @@ function ProfileTab({ utils }: { utils: ReturnType<typeof trpc.useUtils> }) {
     },
   });
 
-  const setRoleMutation = trpc.users.setRole.useMutation({
-    onSuccess: () => {
-      utils.users.me.invalidate();
-      // Reload — role affects dashboard navigation
-      window.location.reload();
-    },
-  });
-
   const userRole = meQuery.data?.role || "user";
 
   const handleSaveProfile = () => {
     updateMutation.mutate({ name });
-  };
-
-  const handleBecomeHost = () => {
-    setShowRoleConfirm(true);
-  };
-
-  const confirmBecomeHost = () => {
-    setRoleMutation.mutate({ role: "host" });
-    setShowRoleConfirm(false);
   };
 
   return (
@@ -204,69 +186,16 @@ function ProfileTab({ utils }: { utils: ReturnType<typeof trpc.useUtils> }) {
       {/* Role Card */}
       <div className="bg-card border border-border rounded-xl p-6">
         <h2 className="text-lg font-semibold text-foreground mb-1">Role</h2>
-        <p className="text-sm text-muted-foreground mb-4">
+        <p className="text-sm text-muted-foreground">
           You are currently a:{" "}
           <span className="text-foreground font-medium capitalize">
             {userRole}
           </span>
         </p>
-
-        {userRole === "user" && (
-          <div className="bg-muted/50 rounded-lg p-4">
-            <p className="text-foreground font-medium mb-2">
-              Want to earn money by hosting AI agents?
-            </p>
-            <ul className="text-sm text-muted-foreground space-y-1 mb-4">
-              <li>• Register your spare hardware</li>
-              <li>• Earn 60% of each subscription</li>
-              <li>• Get paid monthly via Stripe</li>
-            </ul>
-            <button
-              onClick={handleBecomeHost}
-              disabled={setRoleMutation.isPending}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-primary-foreground font-medium rounded-lg transition-colors"
-            >
-              {setRoleMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              Become a Host
-            </button>
-            {setRoleMutation.error && (
-              <p className="text-sm text-destructive mt-2">
-                {setRoleMutation.error.message}
-              </p>
-            )}
-          </div>
-        )}
+        <p className="text-xs text-muted-foreground mt-2">
+          Your role was set when you created your account. Contact support to change it.
+        </p>
       </div>
-
-      {/* Role Confirmation Dialog */}
-      {showRoleConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-card border border-border rounded-xl p-6 max-w-md mx-4 shadow-lg">
-            <h3 className="text-lg font-semibold text-foreground mb-2">
-              Become a Host?
-            </h3>
-            <p className="text-sm text-muted-foreground mb-6">
-              This will change your account to a Host. You&apos;ll be able to
-              register machines and earn revenue. This action cannot be undone
-              without contacting support. Continue?
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowRoleConfirm(false)}
-                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmBecomeHost}
-                className="px-4 py-2 text-sm font-medium bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors"
-              >
-                Yes, Become a Host
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
