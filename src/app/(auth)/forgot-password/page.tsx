@@ -16,8 +16,8 @@ export default function ForgotPasswordPage() {
     setError("");
 
     try {
-      // better-auth uses forgetPassword endpoint via fetch
-      await fetch("/api/auth/forget-password", {
+      // better-auth endpoint for password reset
+      await fetch("/api/auth/request-password-reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
