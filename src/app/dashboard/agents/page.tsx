@@ -2,7 +2,8 @@
 
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
-import { Cpu, Plus, Play, Square, Trash2, ExternalLink } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Cpu, Plus, Play, Square, Trash2, ExternalLink, Check } from "lucide-react";
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -36,6 +37,9 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function AgentsPage() {
+  const searchParams = useSearchParams();
+  const justDeployed = searchParams.get("deployed") === "true";
+
   const { data: agents, isLoading, refetch } = trpc.agents.list.useQuery();
   const stopAgent = trpc.agents.stop.useMutation({ onSuccess: () => refetch() });
   const startAgent = trpc.agents.start.useMutation({ onSuccess: () => refetch() });
@@ -72,6 +76,20 @@ export default function AgentsPage() {
           Deploy Agent
         </Link>
       </div>
+
+      {justDeployed && (
+        <div className="mb-6 bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-start gap-3">
+          <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-foreground">
+              Agent deployed successfully!
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Your agent is being set up and will be running shortly.
+            </p>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="space-y-4">

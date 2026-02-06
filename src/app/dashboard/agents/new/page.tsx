@@ -18,7 +18,7 @@ export default function DeployAgentPage() {
   const [error, setError] = useState("");
 
   const { data: hosts } = trpc.hosts.listAvailable.useQuery();
-  const createAgent = trpc.agents.create.useMutation();
+  const createCheckout = trpc.billing.createCheckoutSession.useMutation();
 
   const selectedHost = hosts?.find((h) => h.id === selectedHostId);
 
@@ -32,14 +32,20 @@ export default function DeployAgentPage() {
     setError("");
 
     try {
-      const agent = await createAgent.mutateAsync({
-        name: name.trim().toLowerCase().replace(/\s+/g, "-"),
+      const result = await createCheckout.mutateAsync({
+        agentName: name.trim().toLowerCase().replace(/\s+/g, "-"),
         hostId: selectedHostId,
       });
 
-      router.push(`/dashboard/agents/${agent.id}`);
+      if (result.url) {
+        window.location.href = result.url;
+      } else {
+        setError("Failed to create checkout session");
+        setIsDeploying(false);
+      }
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Failed to deploy agent";
+      const message =
+        e instanceof Error ? e.message : "Failed to start checkout";
       setError(message);
       setIsDeploying(false);
     }
@@ -281,12 +287,12 @@ export default function DeployAgentPage() {
               {isDeploying ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Deploying...
+                  Redirecting to payment...
                 </>
               ) : (
                 <>
                   Deploy Agent — $
-                  {((selectedHost?.pricePerMonth || 0) / 100).toFixed(2)}
+                  {((selectedHost?.pricePerMonth || 0) / 100).toFixed(2)}/mo
                 </>
               )}
             </button>
