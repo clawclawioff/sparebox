@@ -71,48 +71,49 @@ If Sparebox were a person at a party, they'd be the **sharp, approachable tech f
 ## 4. Color Palette
 
 ### Philosophy
-Dark mode first. Modern tech aesthetic. Purple signals AI/innovation. Clean neutrals let content breathe.
+Light mode, warm and grounded. Earthy tones signal reliability and tangibility — making AI infrastructure feel real and accessible. Warm neutrals create a welcoming, human feel.
 
 ### Primary
 
 | Name | Hex | Usage |
 |------|-----|-------|
-| **Violet** | `#8B5CF6` | Primary CTAs, key interactive elements, brand moments |
-| **Violet Light** | `#A78BFA` | Hover states, secondary accents |
-| **Violet Dark** | `#7C3AED` | Active/pressed states |
+| **Terracotta** | `#C2410C` | Primary CTAs, key interactive elements, brand moments |
+| **Terracotta Light** | `#EA580C` | Hover states |
+| **Terracotta Dark** | `#9A3412` | Active/pressed states |
 
 ### Secondary
 
 | Name | Hex | Usage |
 |------|-----|-------|
-| **Cyan** | `#22D3EE` | Highlights, success accents, data visualization |
-| **Cyan Light** | `#67E8F9` | Hover states for secondary elements |
+| **Sage** | `#65A30D` | Success accents, growth indicators, secondary actions |
+| **Sage Light** | `#84CC16` | Hover states for secondary elements |
+| **Olive** | `#4D7C0F` | Darker accent when needed |
 
-### Neutrals (Dark Mode)
+### Neutrals (Light Mode)
 
 | Name | Hex | Usage |
 |------|-----|-------|
-| **Background** | `#030712` | Page background (gray-950) |
-| **Surface** | `#111827` | Cards, modals (gray-900) |
-| **Elevated** | `#1F2937` | Hover surfaces, nested cards (gray-800) |
-| **Border** | `#374151` | Dividers, borders (gray-700) |
-| **Muted** | `#9CA3AF` | Secondary text, placeholders (gray-400) |
-| **Text** | `#F9FAFB` | Primary text (gray-50) |
+| **Background** | `#FFFBEB` | Page background (warm cream, amber-50) |
+| **Surface** | `#FFFFFF` | Cards, modals (white) |
+| **Elevated** | `#FEF3C7` | Hover surfaces, highlights (amber-100) |
+| **Border** | `#D6D3D1` | Dividers, borders (stone-300) |
+| **Muted** | `#78716C` | Secondary text, placeholders (stone-500) |
+| **Text** | `#1C1917` | Primary text (stone-900) |
 
 ### Status Colors
 
 | Name | Hex | Usage |
 |------|-----|-------|
-| **Success** | `#10B981` | Success states, online indicators, positive actions |
-| **Warning** | `#F59E0B` | Warnings, pending states |
-| **Error** | `#EF4444` | Errors, destructive actions, offline indicators |
+| **Success** | `#65A30D` | Success states, online indicators (sage) |
+| **Warning** | `#D97706` | Warnings, pending states (amber-600) |
+| **Error** | `#DC2626` | Errors, destructive actions (red-600) |
 
-### Gradients
+### Accent Colors
 
-| Name | Values | Usage |
-|------|--------|-------|
-| **Brand Gradient** | `from-violet-500 to-cyan-400` | Hero sections, special CTAs, brand moments |
-| **Subtle Glow** | `violet-500/20` | Background glows, ambient effects |
+| Name | Hex | Usage |
+|------|-----|-------|
+| **Clay** | `#A16207` | Charts, data viz accent |
+| **Forest** | `#166534` | Secondary success, nature accent |
 
 ---
 

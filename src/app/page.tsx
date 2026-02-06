@@ -6,16 +6,15 @@ import { ArrowRight, Server, Cpu, Shield, DollarSign, Zap, Globe, Users, Box } f
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[#030712] text-white overflow-hidden">
-      {/* Animated background gradient */}
-      <div className="fixed inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-cyan-500/5 pointer-events-none" />
-      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-violet-900/20 via-transparent to-transparent pointer-events-none" />
+    <div className="min-h-screen bg-amber-50 text-stone-900 overflow-hidden">
+      {/* Subtle warm gradient background */}
+      <div className="fixed inset-0 bg-gradient-to-b from-orange-50 via-amber-50 to-amber-100/50 pointer-events-none" />
       
-      {/* Subtle grid pattern */}
+      {/* Subtle texture */}
       <div 
-        className="fixed inset-0 pointer-events-none opacity-[0.02]"
+        className="fixed inset-0 pointer-events-none opacity-[0.03]"
         style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000000' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
         }}
       />
 
@@ -26,25 +25,25 @@ export default function Home() {
           animate={{ opacity: 1, x: 0 }}
           className="flex items-center gap-2"
         >
-          <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-cyan-400 rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg flex items-center justify-center shadow-sm">
             <Box className="w-5 h-5 text-white" />
           </div>
-          <span className="font-bold text-xl">Sparebox</span>
+          <span className="font-bold text-xl text-stone-800">Sparebox</span>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           className="flex items-center gap-4"
         >
-          <Link href="/pricing" className="text-gray-400 hover:text-white transition">
+          <Link href="/pricing" className="text-stone-600 hover:text-stone-900 transition">
             Pricing
           </Link>
-          <Link href="/login" className="text-gray-400 hover:text-white transition">
+          <Link href="/login" className="text-stone-600 hover:text-stone-900 transition">
             Log in
           </Link>
           <Link
             href="/signup"
-            className="bg-violet-500 hover:bg-violet-400 px-4 py-2 rounded-lg font-medium transition"
+            className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-medium transition shadow-sm"
           >
             Get Started
           </Link>
@@ -59,7 +58,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="inline-flex items-center gap-2 bg-violet-500/10 border border-violet-500/20 px-4 py-1.5 rounded-full text-sm text-violet-400 mb-6"
+            className="inline-flex items-center gap-2 bg-orange-100 border border-orange-200 px-4 py-1.5 rounded-full text-sm text-orange-700 mb-6"
           >
             <Zap className="w-4 h-4" />
             <span>Beta — Join the P2P AI network</span>
@@ -70,10 +69,10 @@ export default function Home() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="text-5xl md:text-7xl font-bold mb-6 leading-tight tracking-tight"
+            className="text-5xl md:text-7xl font-bold mb-6 leading-tight tracking-tight text-stone-900"
           >
             Your hardware.{" "}
-            <span className="bg-gradient-to-r from-violet-400 via-cyan-400 to-violet-400 bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient">
+            <span className="bg-gradient-to-r from-orange-600 via-amber-600 to-orange-600 bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient">
               Their agents.
             </span>
             <br />
@@ -84,7 +83,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="text-xl text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed"
+            className="text-xl text-stone-600 mb-10 max-w-2xl mx-auto leading-relaxed"
           >
             The P2P marketplace for AI compute. Hosts earn passive income from idle hardware. 
             Users deploy AI agents in minutes. No DevOps required.
@@ -99,14 +98,14 @@ export default function Home() {
           >
             <Link
               href="/signup?role=host"
-              className="group bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-400 hover:to-violet-500 px-8 py-4 rounded-xl font-medium text-lg transition flex items-center justify-center gap-2 shadow-lg shadow-violet-500/25"
+              className="group bg-orange-600 hover:bg-orange-700 text-white px-8 py-4 rounded-xl font-medium text-lg transition flex items-center justify-center gap-2 shadow-md shadow-orange-600/20"
             >
               Start Earning
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Link>
             <Link
               href="/signup?role=user"
-              className="bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 px-8 py-4 rounded-xl font-medium text-lg transition"
+              className="bg-white hover:bg-stone-50 border border-stone-200 text-stone-700 px-8 py-4 rounded-xl font-medium text-lg transition shadow-sm"
             >
               Deploy an Agent
             </Link>
@@ -171,7 +170,7 @@ export default function Home() {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            className="text-3xl md:text-4xl font-bold text-center mb-4 tracking-tight"
+            className="text-3xl md:text-4xl font-bold text-center mb-4 tracking-tight text-stone-900"
           >
             Simple by design
           </motion.h2>
@@ -179,7 +178,7 @@ export default function Home() {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            className="text-gray-400 text-center mb-12 max-w-xl mx-auto"
+            className="text-stone-600 text-center mb-12 max-w-xl mx-auto"
           >
             Complex under the hood. Dead simple on the surface.
           </motion.p>
@@ -212,31 +211,31 @@ export default function Home() {
           viewport={{ once: true }}
           className="mt-32"
         >
-          <div className="bg-gradient-to-b from-violet-500/10 to-transparent border border-violet-500/20 rounded-3xl p-8 md:p-12">
+          <div className="bg-white border border-stone-200 rounded-3xl p-8 md:p-12 shadow-sm">
             <div className="max-w-2xl mx-auto text-center">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4 tracking-tight text-stone-900">
                 Transparent pricing. No surprises.
               </h2>
-              <p className="text-gray-400 mb-8">
+              <p className="text-stone-600 mb-8">
                 $12/month. Host gets $7.20. We get $4.80. That&apos;s it.
               </p>
               
               <div className="grid md:grid-cols-2 gap-6 mb-8">
-                <div className="bg-white/5 rounded-2xl p-6 text-left">
-                  <div className="text-sm text-violet-400 font-medium mb-2">For Hosts</div>
-                  <div className="text-3xl font-bold mb-1">60%</div>
-                  <div className="text-gray-400 text-sm">of every subscription, paid monthly</div>
+                <div className="bg-orange-50 border border-orange-100 rounded-2xl p-6 text-left">
+                  <div className="text-sm text-orange-700 font-medium mb-2">For Hosts</div>
+                  <div className="text-3xl font-bold text-stone-900 mb-1">60%</div>
+                  <div className="text-stone-600 text-sm">of every subscription, paid monthly</div>
                 </div>
-                <div className="bg-white/5 rounded-2xl p-6 text-left">
-                  <div className="text-sm text-cyan-400 font-medium mb-2">For Users</div>
-                  <div className="text-3xl font-bold mb-1">$10-15</div>
-                  <div className="text-gray-400 text-sm">per agent, per month</div>
+                <div className="bg-lime-50 border border-lime-100 rounded-2xl p-6 text-left">
+                  <div className="text-sm text-lime-700 font-medium mb-2">For Users</div>
+                  <div className="text-3xl font-bold text-stone-900 mb-1">$10-15</div>
+                  <div className="text-stone-600 text-sm">per agent, per month</div>
                 </div>
               </div>
 
               <Link
                 href="/pricing"
-                className="inline-flex items-center gap-2 text-violet-400 hover:text-violet-300 font-medium"
+                className="inline-flex items-center gap-2 text-orange-600 hover:text-orange-700 font-medium"
               >
                 See full pricing details
                 <ArrowRight className="w-4 h-4" />
@@ -252,22 +251,22 @@ export default function Home() {
           viewport={{ once: true }}
           className="mt-32 text-center"
         >
-          <h2 className="text-3xl md:text-4xl font-bold mb-4 tracking-tight">
+          <h2 className="text-3xl md:text-4xl font-bold mb-4 tracking-tight text-stone-900">
             Ready to join the network?
           </h2>
-          <p className="text-gray-400 mb-8 max-w-md mx-auto">
+          <p className="text-stone-600 mb-8 max-w-md mx-auto">
             Got spare hardware? Start earning. Need AI hosting? Deploy in minutes.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               href="/signup"
-              className="bg-violet-500 hover:bg-violet-400 px-8 py-3 rounded-xl font-medium transition shadow-lg shadow-violet-500/25"
+              className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-3 rounded-xl font-medium transition shadow-md shadow-orange-600/20"
             >
               Create Account
             </Link>
             <Link
               href="/pricing"
-              className="bg-white/5 hover:bg-white/10 border border-white/10 px-8 py-3 rounded-xl font-medium transition"
+              className="bg-white hover:bg-stone-50 border border-stone-200 text-stone-700 px-8 py-3 rounded-xl font-medium transition shadow-sm"
             >
               View Pricing
             </Link>
@@ -276,15 +275,15 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-white/5 py-8">
+      <footer className="relative z-10 border-t border-stone-200 bg-white/50 py-8">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-violet-500 to-cyan-400 rounded flex items-center justify-center">
+            <div className="w-6 h-6 bg-gradient-to-br from-orange-600 to-orange-700 rounded flex items-center justify-center">
               <Box className="w-4 h-4 text-white" />
             </div>
-            <span className="font-semibold">Sparebox</span>
+            <span className="font-semibold text-stone-800">Sparebox</span>
           </div>
-          <p className="text-gray-500 text-sm">
+          <p className="text-stone-500 text-sm">
             © 2026 Sparebox. Open infrastructure for personal AI.
           </p>
         </div>
@@ -315,11 +314,11 @@ function Stat({
 }) {
   return (
     <div className="text-center">
-      <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{sublabel}</p>
-      <p className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">
+      <p className="text-xs text-stone-500 uppercase tracking-wider mb-1">{sublabel}</p>
+      <p className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
         {value}
       </p>
-      <p className="text-gray-400 text-sm">{label}</p>
+      <p className="text-stone-600 text-sm">{label}</p>
     </div>
   );
 }
@@ -340,13 +339,13 @@ function FeatureCard({
   return (
     <motion.div
       whileHover={{ y: -4 }}
-      className={`bg-white/[0.02] hover:bg-white/[0.04] border border-white/5 hover:border-white/10 rounded-2xl p-6 transition-colors ${large ? "p-8" : ""} ${className}`}
+      className={`bg-white hover:bg-stone-50 border border-stone-200 hover:border-stone-300 rounded-2xl p-6 transition-all shadow-sm ${large ? "p-8" : ""} ${className}`}
     >
-      <div className="w-12 h-12 bg-gradient-to-br from-violet-500/20 to-cyan-500/20 rounded-xl flex items-center justify-center text-violet-400 mb-4">
+      <div className="w-12 h-12 bg-gradient-to-br from-orange-100 to-amber-100 rounded-xl flex items-center justify-center text-orange-600 mb-4">
         {icon}
       </div>
-      <h3 className={`font-semibold mb-2 ${large ? "text-xl" : "text-lg"}`}>{title}</h3>
-      <p className="text-gray-400 text-sm leading-relaxed">{description}</p>
+      <h3 className={`font-semibold text-stone-900 mb-2 ${large ? "text-xl" : "text-lg"}`}>{title}</h3>
+      <p className="text-stone-600 text-sm leading-relaxed">{description}</p>
     </motion.div>
   );
 }
@@ -370,11 +369,11 @@ function StepCard({
       transition={{ delay }}
       className="text-center"
     >
-      <div className="w-14 h-14 bg-gradient-to-br from-violet-500 to-cyan-400 rounded-2xl flex items-center justify-center text-2xl font-bold mx-auto mb-4 shadow-lg shadow-violet-500/25">
+      <div className="w-14 h-14 bg-gradient-to-br from-orange-600 to-amber-600 rounded-2xl flex items-center justify-center text-2xl font-bold text-white mx-auto mb-4 shadow-md shadow-orange-600/20">
         {number}
       </div>
-      <h3 className="font-semibold text-lg mb-2">{title}</h3>
-      <p className="text-gray-400 text-sm leading-relaxed">{description}</p>
+      <h3 className="font-semibold text-lg text-stone-900 mb-2">{title}</h3>
+      <p className="text-stone-600 text-sm leading-relaxed">{description}</p>
     </motion.div>
   );
 }
