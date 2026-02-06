@@ -38,8 +38,9 @@ export default function DeployAgentPage() {
       });
 
       router.push(`/dashboard/agents/${agent.id}`);
-    } catch (e: any) {
-      setError(e.message || "Failed to deploy agent");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Failed to deploy agent";
+      setError(message);
       setIsDeploying(false);
     }
   };
@@ -48,14 +49,14 @@ export default function DeployAgentPage() {
     <div className="max-w-2xl mx-auto">
       <Link
         href="/dashboard/agents"
-        className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white mb-6"
+        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6"
       >
         <ArrowLeft className="w-4 h-4" />
         Back to Agents
       </Link>
 
-      <h1 className="text-2xl font-bold text-white mb-2">Deploy a New Agent</h1>
-      <p className="text-zinc-400 mb-8">
+      <h1 className="text-2xl font-bold text-foreground mb-2">Deploy a New Agent</h1>
+      <p className="text-muted-foreground mb-8">
         Get your AI agent running in minutes
       </p>
 
@@ -66,10 +67,10 @@ export default function DeployAgentPage() {
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                 step > s
-                  ? "bg-emerald-500 text-black"
+                  ? "bg-primary text-primary-foreground"
                   : step === s
-                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500"
-                  : "bg-zinc-800 text-zinc-500"
+                  ? "bg-primary/20 text-primary border border-primary"
+                  : "bg-muted text-muted-foreground"
               }`}
             >
               {step > s ? <Check className="w-4 h-4" /> : s}
@@ -77,7 +78,7 @@ export default function DeployAgentPage() {
             {s < 3 && (
               <div
                 className={`w-12 h-0.5 ${
-                  step > s ? "bg-emerald-500" : "bg-zinc-800"
+                  step > s ? "bg-primary" : "bg-muted"
                 }`}
               />
             )}
@@ -87,17 +88,17 @@ export default function DeployAgentPage() {
 
       {/* Step 1: Agent Details */}
       {step === 1 && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-1">
+        <div className="bg-card border border-border rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-foreground mb-1">
             Step 1: Agent Details
           </h2>
-          <p className="text-sm text-zinc-400 mb-6">
+          <p className="text-sm text-muted-foreground mb-6">
             Give your agent a name to identify it
           </p>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 Agent Name *
               </label>
               <input
@@ -105,18 +106,18 @@ export default function DeployAgentPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="my-assistant"
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
+                className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
-              <p className="text-xs text-zinc-500 mt-1.5">
+              <p className="text-xs text-muted-foreground mt-1.5">
                 Lowercase letters, numbers, and hyphens only
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 OpenClaw Version
               </label>
-              <select className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-emerald-500">
+              <select className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground focus:outline-none focus:ring-2 focus:ring-ring">
                 <option value="latest">Latest (v2.1.0)</option>
                 <option value="2.0.0">v2.0.0</option>
               </select>
@@ -127,7 +128,7 @@ export default function DeployAgentPage() {
             <button
               onClick={() => setStep(2)}
               disabled={!canProceedStep1}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-400 text-black font-medium rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground text-primary-foreground font-medium rounded-lg transition-colors"
             >
               Continue
               <ArrowRight className="w-4 h-4" />
@@ -138,11 +139,11 @@ export default function DeployAgentPage() {
 
       {/* Step 2: Select Host */}
       {step === 2 && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-1">
+        <div className="bg-card border border-border rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-foreground mb-1">
             Step 2: Select Host
           </h2>
-          <p className="text-sm text-zinc-400 mb-6">
+          <p className="text-sm text-muted-foreground mb-6">
             Choose where your agent will run
           </p>
 
@@ -152,8 +153,8 @@ export default function DeployAgentPage() {
                 key={host.id}
                 className={`flex items-center gap-4 p-4 border rounded-lg cursor-pointer transition-colors ${
                   selectedHostId === host.id
-                    ? "border-emerald-500 bg-emerald-500/5"
-                    : "border-zinc-800 hover:border-zinc-700"
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:border-border/80 hover:bg-accent"
                 }`}
               >
                 <input
@@ -167,22 +168,22 @@ export default function DeployAgentPage() {
                 <div
                   className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                     selectedHostId === host.id
-                      ? "border-emerald-500"
-                      : "border-zinc-600"
+                      ? "border-primary"
+                      : "border-muted-foreground/40"
                   }`}
                 >
                   {selectedHostId === host.id && (
-                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <div className="w-2.5 h-2.5 rounded-full bg-primary" />
                   )}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
-                    <span className="font-medium text-white">{host.name}</span>
-                    <span className="text-emerald-400 font-medium">
+                    <span className="font-medium text-foreground">{host.name}</span>
+                    <span className="text-primary font-medium">
                       ${((host.pricePerMonth || 0) / 100).toFixed(0)}/mo
                     </span>
                   </div>
-                  <p className="text-sm text-zinc-400 mt-0.5">
+                  <p className="text-sm text-muted-foreground mt-0.5">
                     {host.cpuCores} cores • {host.ramGb}GB RAM •{" "}
                     {host.city || host.region || "Unknown location"} •{" "}
                     {host.uptimePercent?.toFixed(1)}% uptime
@@ -195,7 +196,7 @@ export default function DeployAgentPage() {
           <div className="flex justify-between mt-6">
             <button
               onClick={() => setStep(1)}
-              className="inline-flex items-center gap-2 px-4 py-2 text-zinc-400 hover:text-white transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               Back
@@ -203,7 +204,7 @@ export default function DeployAgentPage() {
             <button
               onClick={() => setStep(3)}
               disabled={!canProceedStep2}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-400 text-black font-medium rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground text-primary-foreground font-medium rounded-lg transition-colors"
             >
               Continue
               <ArrowRight className="w-4 h-4" />
@@ -214,52 +215,52 @@ export default function DeployAgentPage() {
 
       {/* Step 3: Review & Deploy */}
       {step === 3 && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-1">
+        <div className="bg-card border border-border rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-foreground mb-1">
             Step 3: Review & Deploy
           </h2>
-          <p className="text-sm text-zinc-400 mb-6">
+          <p className="text-sm text-muted-foreground mb-6">
             Confirm your deployment details
           </p>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-              <p className="text-sm text-red-400">{error}</p>
+            <div className="status-error rounded-lg p-4 mb-6">
+              <p className="text-sm">{error}</p>
             </div>
           )}
 
-          <div className="bg-zinc-800/50 rounded-lg p-4 mb-6">
-            <h3 className="text-sm font-medium text-zinc-300 mb-3">
+          <div className="bg-muted/50 rounded-lg p-4 mb-6">
+            <h3 className="text-sm font-medium text-foreground mb-3">
               Order Summary
             </h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-zinc-400">Agent</span>
-                <span className="text-white">{name}</span>
+                <span className="text-muted-foreground">Agent</span>
+                <span className="text-foreground">{name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-zinc-400">Host</span>
-                <span className="text-white">{selectedHost?.name}</span>
+                <span className="text-muted-foreground">Host</span>
+                <span className="text-foreground">{selectedHost?.name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-zinc-400">Location</span>
-                <span className="text-white">
+                <span className="text-muted-foreground">Location</span>
+                <span className="text-foreground">
                   {selectedHost?.city || selectedHost?.region || "—"}
                 </span>
               </div>
-              <div className="border-t border-zinc-700 my-3" />
+              <div className="border-t border-border my-3" />
               <div className="flex justify-between font-medium">
-                <span className="text-zinc-300">Monthly subscription</span>
-                <span className="text-emerald-400">
+                <span className="text-foreground">Monthly subscription</span>
+                <span className="text-primary">
                   ${((selectedHost?.pricePerMonth || 0) / 100).toFixed(2)}/mo
                 </span>
               </div>
             </div>
           </div>
 
-          <p className="text-xs text-zinc-500 mb-6">
+          <p className="text-xs text-muted-foreground mb-6">
             By deploying, you agree to our{" "}
-            <Link href="/terms" className="text-emerald-400 hover:underline">
+            <Link href="/terms" className="text-primary hover:underline">
               Terms of Service
             </Link>
           </p>
@@ -267,7 +268,7 @@ export default function DeployAgentPage() {
           <div className="flex justify-between">
             <button
               onClick={() => setStep(2)}
-              className="inline-flex items-center gap-2 px-4 py-2 text-zinc-400 hover:text-white transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               Back
@@ -275,7 +276,7 @@ export default function DeployAgentPage() {
             <button
               onClick={handleDeploy}
               disabled={isDeploying}
-              className="inline-flex items-center gap-2 px-6 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-black font-medium rounded-lg transition-colors"
+              className="inline-flex items-center gap-2 px-6 py-2 bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-primary-foreground font-medium rounded-lg transition-colors"
             >
               {isDeploying ? (
                 <>

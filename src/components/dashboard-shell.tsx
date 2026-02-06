@@ -102,10 +102,10 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
     admin: "Admin",
   }[user.role];
 
-  const roleColor = {
-    user: "bg-blue-500/10 text-blue-400",
-    host: "bg-emerald-500/10 text-emerald-400",
-    admin: "bg-purple-500/10 text-purple-400",
+  const roleClass = {
+    user: "role-user",
+    host: "role-host",
+    admin: "role-admin",
   }[user.role];
 
   return (
@@ -179,7 +179,7 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
                       {user.name || "User"}
                     </p>
                     <div className="flex items-center gap-2">
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${roleColor}`}>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${roleClass}`}>
                         {roleLabel}
                       </span>
                     </div>

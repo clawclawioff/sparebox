@@ -3,9 +3,138 @@
 
 @custom-variant dark (&:is(.dark *));
 
-body {
-  font-family: system-ui, -apple-system, sans-serif;
+/* =====================================================
+   SPAREBOX DESIGN SYSTEM
+   
+   Single source of truth for all design tokens.
+   To change the theme, update the values in :root.
+   Everything else adapts automatically.
+   ===================================================== */
+
+:root {
+  /* ----- RADIUS ----- */
+  --radius: 0.625rem;
+
+  /* ----- BRAND COLORS ----- */
+  /* Primary: Terracotta/Orange - warm, grounded, action */
+  --brand-primary: oklch(0.55 0.17 35);
+  --brand-primary-light: oklch(0.62 0.15 35);
+  --brand-primary-dark: oklch(0.48 0.18 35);
+  --brand-primary-muted: oklch(0.55 0.17 35 / 0.1);
+  
+  /* Secondary: Sage green - growth, success */
+  --brand-secondary: oklch(0.60 0.15 145);
+  --brand-secondary-light: oklch(0.68 0.13 145);
+  --brand-secondary-muted: oklch(0.60 0.15 145 / 0.1);
+
+  /* ----- NEUTRAL COLORS ----- */
+  /* Background tones */
+  --neutral-bg: oklch(0.99 0.015 85);
+  --neutral-surface: oklch(1 0 0);
+  --neutral-surface-hover: oklch(0.98 0.01 85);
+  --neutral-subtle: oklch(0.97 0.01 85);
+  
+  /* Text tones */
+  --neutral-text: oklch(0.18 0.01 60);
+  --neutral-text-secondary: oklch(0.45 0.01 60);
+  --neutral-text-muted: oklch(0.55 0.01 60);
+  --neutral-text-inverted: oklch(0.98 0.005 60);
+  
+  /* Border tones */
+  --neutral-border: oklch(0.88 0.006 60);
+  --neutral-border-strong: oklch(0.80 0.01 60);
+  --neutral-border-muted: oklch(0.92 0.005 60);
+
+  /* ----- SEMANTIC COLORS ----- */
+  --semantic-success: oklch(0.60 0.15 145);
+  --semantic-success-muted: oklch(0.60 0.15 145 / 0.1);
+  --semantic-warning: oklch(0.75 0.15 75);
+  --semantic-warning-muted: oklch(0.75 0.15 75 / 0.1);
+  --semantic-error: oklch(0.55 0.22 25);
+  --semantic-error-muted: oklch(0.55 0.22 25 / 0.1);
+  --semantic-info: oklch(0.60 0.15 250);
+  --semantic-info-muted: oklch(0.60 0.15 250 / 0.1);
+
+  /* ----- ROLE COLORS ----- */
+  --role-user-bg: oklch(0.60 0.15 250 / 0.1);
+  --role-user-text: oklch(0.45 0.12 250);
+  --role-host-bg: oklch(0.55 0.17 35 / 0.1);
+  --role-host-text: oklch(0.48 0.15 35);
+  --role-admin-bg: oklch(0.60 0.18 300 / 0.1);
+  --role-admin-text: oklch(0.48 0.15 300);
+
+  /* ----- CHART COLORS ----- */
+  --chart-1: oklch(0.55 0.17 35);
+  --chart-2: oklch(0.60 0.15 145);
+  --chart-3: oklch(0.70 0.15 75);
+  --chart-4: oklch(0.50 0.15 145);
+  --chart-5: oklch(0.55 0.12 70);
+
+  /* =====================================================
+     SHADCN/UI COMPATIBLE VARIABLES
+     These map our design tokens to shadcn's expected vars
+     ===================================================== */
+  
+  --background: var(--neutral-bg);
+  --foreground: var(--neutral-text);
+  
+  --card: var(--neutral-surface);
+  --card-foreground: var(--neutral-text);
+  
+  --popover: var(--neutral-surface);
+  --popover-foreground: var(--neutral-text);
+  
+  --primary: var(--brand-primary);
+  --primary-foreground: var(--neutral-text-inverted);
+  
+  --secondary: var(--neutral-subtle);
+  --secondary-foreground: var(--neutral-text);
+  
+  --muted: var(--neutral-subtle);
+  --muted-foreground: var(--neutral-text-muted);
+  
+  --accent: var(--neutral-surface-hover);
+  --accent-foreground: var(--neutral-text);
+  
+  --destructive: var(--semantic-error);
+  
+  --border: var(--neutral-border);
+  --input: var(--neutral-border);
+  --ring: var(--brand-primary);
+
+  /* Sidebar */
+  --sidebar: var(--neutral-surface);
+  --sidebar-foreground: var(--neutral-text);
+  --sidebar-primary: var(--brand-primary);
+  --sidebar-primary-foreground: var(--neutral-text-inverted);
+  --sidebar-accent: var(--neutral-surface-hover);
+  --sidebar-accent-foreground: var(--neutral-text);
+  --sidebar-border: var(--neutral-border-muted);
+  --sidebar-ring: var(--brand-primary);
 }
+
+/* ----- DARK MODE (optional, for future) ----- */
+.dark {
+  --neutral-bg: oklch(0.14 0.01 60);
+  --neutral-surface: oklch(0.18 0.01 60);
+  --neutral-surface-hover: oklch(0.22 0.01 60);
+  --neutral-subtle: oklch(0.20 0.01 60);
+  
+  --neutral-text: oklch(0.98 0.005 60);
+  --neutral-text-secondary: oklch(0.75 0.01 60);
+  --neutral-text-muted: oklch(0.60 0.01 60);
+  
+  --neutral-border: oklch(0.28 0.01 60);
+  --neutral-border-strong: oklch(0.35 0.01 60);
+  --neutral-border-muted: oklch(0.24 0.01 60);
+  
+  --brand-primary: oklch(0.62 0.16 35);
+  --brand-primary-light: oklch(0.68 0.14 35);
+}
+
+/* =====================================================
+   TAILWIND THEME INLINE MAPPINGS
+   ===================================================== */
 
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
@@ -13,8 +142,7 @@ body {
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
+  
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -48,87 +176,12 @@ body {
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-:root {
-  --radius: 0.625rem;
-  /* Light mode with warm, earthy tones */
-  /* Background: Warm cream #FFFBEB */
-  --background: oklch(0.99 0.02 90);
-  /* Foreground: Stone-900 #1C1917 */
-  --foreground: oklch(0.15 0.01 60);
-  /* Card: White */
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0.01 60);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0.01 60);
-  /* Primary: Terracotta #C2410C */
-  --primary: oklch(0.52 0.17 35);
-  --primary-foreground: oklch(0.99 0.01 90);
-  /* Secondary: Stone-100 */
-  --secondary: oklch(0.97 0.005 60);
-  --secondary-foreground: oklch(0.15 0.01 60);
-  /* Muted: Stone-200 */
-  --muted: oklch(0.94 0.005 60);
-  /* Muted foreground: Stone-500 */
-  --muted-foreground: oklch(0.55 0.01 60);
-  --accent: oklch(0.94 0.005 60);
-  --accent-foreground: oklch(0.15 0.01 60);
-  /* Destructive: Red-600 */
-  --destructive: oklch(0.55 0.22 25);
-  /* Border: Stone-300 */
-  --border: oklch(0.87 0.005 60);
-  --input: oklch(0.87 0.005 60);
-  /* Ring: Terracotta */
-  --ring: oklch(0.52 0.17 35);
-  /* Charts: Terracotta, Sage, Amber, Forest, Clay */
-  --chart-1: oklch(0.52 0.17 35);
-  --chart-2: oklch(0.65 0.18 125);
-  --chart-3: oklch(0.70 0.16 75);
-  --chart-4: oklch(0.50 0.15 145);
-  --chart-5: oklch(0.55 0.12 70);
-  /* Sidebar: Warm off-white */
-  --sidebar: oklch(0.98 0.01 60);
-  --sidebar-foreground: oklch(0.15 0.01 60);
-  --sidebar-primary: oklch(0.52 0.17 35);
-  --sidebar-primary-foreground: oklch(0.99 0.01 90);
-  --sidebar-accent: oklch(0.94 0.005 60);
-  --sidebar-accent-foreground: oklch(0.15 0.01 60);
-  --sidebar-border: oklch(0.90 0.005 60);
-  --sidebar-ring: oklch(0.52 0.17 35);
-}
+/* =====================================================
+   BASE STYLES
+   ===================================================== */
 
-.dark {
-  /* Dark mode - optional, keeping for compatibility */
-  --background: oklch(0.15 0.01 60);
-  --foreground: oklch(0.98 0.005 60);
-  --card: oklch(0.20 0.01 60);
-  --card-foreground: oklch(0.98 0.005 60);
-  --popover: oklch(0.20 0.01 60);
-  --popover-foreground: oklch(0.98 0.005 60);
-  --primary: oklch(0.62 0.17 35);
-  --primary-foreground: oklch(0.98 0.005 60);
-  --secondary: oklch(0.25 0.01 60);
-  --secondary-foreground: oklch(0.98 0.005 60);
-  --muted: oklch(0.25 0.01 60);
-  --muted-foreground: oklch(0.65 0.01 60);
-  --accent: oklch(0.25 0.01 60);
-  --accent-foreground: oklch(0.98 0.005 60);
-  --destructive: oklch(0.60 0.20 25);
-  --border: oklch(0.30 0.01 60);
-  --input: oklch(0.30 0.01 60);
-  --ring: oklch(0.62 0.17 35);
-  --chart-1: oklch(0.62 0.17 35);
-  --chart-2: oklch(0.65 0.18 125);
-  --chart-3: oklch(0.70 0.16 75);
-  --chart-4: oklch(0.50 0.15 145);
-  --chart-5: oklch(0.55 0.12 70);
-  --sidebar: oklch(0.20 0.01 60);
-  --sidebar-foreground: oklch(0.98 0.005 60);
-  --sidebar-primary: oklch(0.62 0.17 35);
-  --sidebar-primary-foreground: oklch(0.98 0.005 60);
-  --sidebar-accent: oklch(0.25 0.01 60);
-  --sidebar-accent-foreground: oklch(0.98 0.005 60);
-  --sidebar-border: oklch(0.30 0.01 60);
-  --sidebar-ring: oklch(0.62 0.17 35);
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 @layer base {
@@ -138,4 +191,63 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* =====================================================
+   UTILITY CLASSES
+   ===================================================== */
+
+/* Brand gradient for logos and accents */
+.gradient-brand {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+}
+
+/* Subtle page gradient */
+.gradient-page {
+  background: linear-gradient(180deg, var(--neutral-bg), var(--neutral-subtle));
+}
+
+/* Role badges */
+.role-user {
+  background: var(--role-user-bg);
+  color: var(--role-user-text);
+}
+
+.role-host {
+  background: var(--role-host-bg);
+  color: var(--role-host-text);
+}
+
+.role-admin {
+  background: var(--role-admin-bg);
+  color: var(--role-admin-text);
+}
+
+/* Status indicators */
+.status-success {
+  background: var(--semantic-success-muted);
+  color: var(--semantic-success);
+}
+
+.status-warning {
+  background: var(--semantic-warning-muted);
+  color: var(--semantic-warning);
+}
+
+.status-error {
+  background: var(--semantic-error-muted);
+  color: var(--semantic-error);
+}
+
+/* Focus ring */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
+}
+
+/* Gradient text for headings */
+.text-gradient-brand {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
