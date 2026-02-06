@@ -2,7 +2,7 @@
 
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import {
   ArrowLeft,
   Play,
@@ -71,18 +71,17 @@ function StatCard({
   );
 }
 
-export default function AgentDetailsPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default function AgentDetailsPage() {
   const router = useRouter();
+  const params = useParams();
+  const agentId = params.id as string;
+  
   const [activeTab, setActiveTab] = useState<"overview" | "logs" | "config">(
     "overview"
   );
 
   const { data: agent, isLoading, refetch } = trpc.agents.get.useQuery({
-    id: params.id,
+    id: agentId,
   });
 
   const stopAgent = trpc.agents.stop.useMutation({ onSuccess: () => refetch() });
@@ -95,12 +94,12 @@ export default function AgentDetailsPage({
 
   const handleStop = async () => {
     if (confirm("Are you sure you want to stop this agent?")) {
-      await stopAgent.mutateAsync({ id: params.id });
+      await stopAgent.mutateAsync({ id: agentId });
     }
   };
 
   const handleStart = async () => {
-    await startAgent.mutateAsync({ id: params.id });
+    await startAgent.mutateAsync({ id: agentId });
   };
 
   const handleDelete = async () => {
@@ -109,7 +108,7 @@ export default function AgentDetailsPage({
         "Are you sure you want to delete this agent? This cannot be undone."
       )
     ) {
-      await deleteAgent.mutateAsync({ id: params.id });
+      await deleteAgent.mutateAsync({ id: agentId });
     }
   };
 
