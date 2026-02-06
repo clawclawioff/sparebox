@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "@/lib/auth-client";
+import { PasswordInput } from "@/components/ui/password-input";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -38,31 +39,32 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-foreground mb-1"
+            >
               Email
             </label>
             <input
+              id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition"
               placeholder="you@example.com"
               required
+              disabled={loading}
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition"
-              placeholder="••••••••"
-              required
-            />
-          </div>
+
+          <PasswordInput
+            label="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            required
+            disabled={loading}
+          />
 
           {error && (
             <div className="status-error rounded-lg p-3">
@@ -78,6 +80,15 @@ export default function LoginPage() {
             {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
+
+        <div className="mt-4 text-center">
+          <Link
+            href="/forgot-password"
+            className="text-sm text-primary hover:text-primary/80"
+          >
+            Forgot your password?
+          </Link>
+        </div>
 
         <p className="text-muted-foreground text-sm text-center mt-6">
           Don&apos;t have an account?{" "}

@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { signUp } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { Server, Cpu, Loader2 } from "lucide-react";
+import { PasswordInput } from "@/components/ui/password-input";
 
 function SignupForm() {
   const searchParams = useSearchParams();
@@ -14,6 +15,7 @@ function SignupForm() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<"host" | "user" | "">(
     initialRole === "host" || initialRole === "user" ? initialRole : ""
@@ -24,10 +26,25 @@ function SignupForm() {
   // tRPC mutation to set role after signup
   const setRoleMutation = trpc.users.setRole.useMutation();
 
+  const validateForm = (): string | null => {
+    if (!role) {
+      return "Please select whether you want to host or deploy agents";
+    }
+    if (password.length < 8) {
+      return "Password must be at least 8 characters";
+    }
+    if (password !== confirmPassword) {
+      return "Passwords do not match";
+    }
+    return null;
+  };
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!role) {
-      setError("Please select whether you want to host or deploy agents");
+    
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
@@ -53,7 +70,7 @@ function SignupForm() {
       await new Promise(resolve => setTimeout(resolve, 500));
       
       try {
-        await setRoleMutation.mutateAsync({ role });
+        await setRoleMutation.mutateAsync({ role: role as "host" | "user" });
       } catch (roleError: unknown) {
         // Role setting failed, but account was created
         console.error("Failed to set role:", roleError);
@@ -69,6 +86,9 @@ function SignupForm() {
       setLoading(false);
     }
   };
+
+  const passwordsMatch = password === confirmPassword || confirmPassword === "";
+  const passwordError = !passwordsMatch ? "Passwords do not match" : undefined;
 
   return (
     <div className="w-full max-w-md">
@@ -121,10 +141,14 @@ function SignupForm() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">
+            <label
+              htmlFor="name"
+              className="block text-sm font-medium text-foreground mb-1"
+            >
               Name
             </label>
             <input
+              id="name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -136,10 +160,14 @@ function SignupForm() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-foreground mb-1"
+            >
               Email
             </label>
             <input
+              id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -150,22 +178,26 @@ function SignupForm() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2.5 bg-background border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition"
-              placeholder="••••••••"
-              minLength={8}
-              required
-              disabled={loading}
-            />
-            <p className="text-xs text-muted-foreground mt-1">Minimum 8 characters</p>
-          </div>
+          <PasswordInput
+            label="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            hint="Minimum 8 characters"
+            minLength={8}
+            required
+            disabled={loading}
+          />
+
+          <PasswordInput
+            label="Confirm Password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="••••••••"
+            error={passwordError}
+            required
+            disabled={loading}
+          />
 
           {error && (
             <div className="status-error rounded-lg p-3">
@@ -175,7 +207,7 @@ function SignupForm() {
 
           <button
             type="submit"
-            disabled={loading || !role}
+            disabled={loading || !role || !passwordsMatch}
             className="w-full bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground text-primary-foreground font-medium py-2.5 px-4 rounded-lg transition flex items-center justify-center gap-2 shadow-sm"
           >
             {loading ? (
