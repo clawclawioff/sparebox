@@ -12,7 +12,6 @@ import {
   Server,
   DollarSign,
   Copy,
-  ExternalLink,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -145,8 +144,25 @@ export default function AgentDetailsPage() {
   }
 
   const host = (agent as any).host;
-  const gatewayUrl = `wss://${agent.id.slice(0, 8)}.sparebox.dev`;
-  const dashboardUrl = `https://${agent.id.slice(0, 8)}.sparebox.dev/dashboard`;
+  const subscriptionsData = (agent as any).subscriptions || [];
+  const activeSubscription = subscriptionsData.find((s: any) => s.status === "active");
+  const monthlyCost = activeSubscription ? activeSubscription.pricePerMonth : 0;
+
+  // Calculate uptime indicator based on lastActive
+  const getUptimeDisplay = () => {
+    if (!agent.lastActive) return "N/A";
+    const lastActiveDate = new Date(agent.lastActive);
+    const now = new Date();
+    const diffMs = now.getTime() - lastActiveDate.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (agent.status === "running") {
+      if (diffMins < 5) return "Online";
+      if (diffMins < 60) return `${diffMins}m ago`;
+      return `${Math.floor(diffMins / 60)}h ago`;
+    }
+    return "Offline";
+  };
 
   return (
     <div>
@@ -207,8 +223,8 @@ export default function AgentDetailsPage() {
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <StatCard
-          label="Uptime"
-          value="99.9%"
+          label="Status"
+          value={getUptimeDisplay()}
           icon={Clock}
         />
         <StatCard
@@ -218,7 +234,7 @@ export default function AgentDetailsPage() {
         />
         <StatCard
           label="Monthly Cost"
-          value="$12.00"
+          value={monthlyCost > 0 ? `$${(monthlyCost / 100).toFixed(2)}` : "N/A"}
           icon={DollarSign}
         />
       </div>
@@ -270,42 +286,31 @@ export default function AgentDetailsPage() {
             </div>
           </div>
 
-          {/* Connection Info */}
-          <div className="bg-card border border-border rounded-xl p-6">
-            <h3 className="font-semibold text-foreground mb-4">Connection</h3>
-            <div className="space-y-4">
-              <div>
-                <span className="text-sm text-muted-foreground">Gateway URL</span>
-                <div className="flex items-center gap-2 mt-1">
-                  <code className="flex-1 bg-muted px-3 py-2 rounded-lg text-sm text-primary font-mono">
-                    {gatewayUrl}
-                  </code>
-                  <button
-                    onClick={() => copyToClipboard(gatewayUrl)}
-                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </button>
+          {/* Connection Info - only show when agent is running */}
+          {agent.status === "running" && (
+            <div className="bg-card border border-border rounded-xl p-6">
+              <h3 className="font-semibold text-foreground mb-4">Connection</h3>
+              <div className="space-y-4">
+                <div>
+                  <span className="text-sm text-muted-foreground">Agent ID</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <code className="flex-1 bg-muted px-3 py-2 rounded-lg text-sm text-primary font-mono">
+                      {agent.id}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(agent.id)}
+                      className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <span className="text-sm text-muted-foreground">Dashboard</span>
-                <div className="flex items-center gap-2 mt-1">
-                  <code className="flex-1 bg-muted px-3 py-2 rounded-lg text-sm text-primary font-mono">
-                    {dashboardUrl}
-                  </code>
-                  <a
-                    href={dashboardUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                </div>
+                <p className="text-sm text-muted-foreground">
+                  Connection details will be available once the agent is fully deployed.
+                </p>
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 

@@ -1,4 +1,5 @@
 import { router, hostProcedure } from "../trpc";
+import { TRPCError } from "@trpc/server";
 import { getStripe } from "@/lib/stripe";
 import { user } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -82,9 +83,10 @@ export const connectRouter = router({
   // Create a login link for the Express Dashboard
   createDashboardLink: hostProcedure.mutation(async ({ ctx }) => {
     if (!ctx.user.stripeConnectAccountId) {
-      throw new Error(
-        "No Connect account found. Please complete onboarding first."
-      );
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "No Connect account found. Please complete onboarding first.",
+      });
     }
 
     const loginLink = await getStripe().accounts.createLoginLink(

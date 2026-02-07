@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { db } from "@/db";
 import { agents, subscriptions, hosts, user } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
+import { PLATFORM_FEE_PERCENT } from "@/lib/constants";
 
 export async function POST(req: NextRequest) {
   let body: string;
@@ -190,7 +191,7 @@ async function handleCheckoutCompleted(session: any) {
       })
       .returning();
 
-    const platformFee = Math.round(host.pricePerMonth * 0.4);
+    const platformFee = Math.round(host.pricePerMonth * (PLATFORM_FEE_PERCENT / 100));
     const hostPayout = host.pricePerMonth - platformFee;
 
     await tx.insert(subscriptions).values({

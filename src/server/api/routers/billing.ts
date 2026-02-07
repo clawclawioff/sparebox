@@ -1,11 +1,10 @@
 import { z } from "zod";
 import { router, protectedProcedure } from "../trpc";
+import { TRPCError } from "@trpc/server";
 import { getStripe } from "@/lib/stripe";
-import { hosts, user } from "@/db/schema";
+import { hosts, user, subscriptions } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-
-// Platform keeps 40%, host gets 60%
-const APPLICATION_FEE_PERCENT = 40;
+import { PLATFORM_FEE_PERCENT } from "@/lib/constants";
 
 export const billingRouter = router({
   createCheckoutSession: protectedProcedure
@@ -23,7 +22,10 @@ export const billingRouter = router({
       });
 
       if (!host) {
-        throw new Error("Host not available");
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Host not available",
+        });
       }
 
       // Look up the host's user to get their Connect account
@@ -34,7 +36,7 @@ export const billingRouter = router({
       // Build subscription_data — route funds to host if they have a Connect account
       const subscriptionData: Record<string, unknown> = {};
       if (hostUser?.stripeConnectAccountId) {
-        subscriptionData.application_fee_percent = APPLICATION_FEE_PERCENT;
+        subscriptionData.application_fee_percent = PLATFORM_FEE_PERCENT;
         subscriptionData.transfer_data = {
           destination: hostUser.stripeConnectAccountId,
         };
@@ -70,10 +72,23 @@ export const billingRouter = router({
           hostId: input.hostId,
           config: input.config || "",
         },
-        success_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://sparebox.dev"}/dashboard/agents?deployed=true`,
-        cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://sparebox.dev"}/dashboard/agents/new`,
+        success_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.sparebox.dev"}/dashboard/agents?deployed=true`,
+        cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.sparebox.dev"}/dashboard/agents/new`,
       });
 
       return { url: session.url };
     }),
+
+  getMySubscriptions: protectedProcedure.query(async ({ ctx }) => {
+    const subs = await ctx.db.query.subscriptions.findMany({
+      where: eq(subscriptions.userId, ctx.user.id),
+      with: {
+        agent: { columns: { id: true, name: true, status: true } },
+        host: { columns: { id: true, name: true, region: true } },
+      },
+      orderBy: (s, { desc }) => [desc(s.createdAt)],
+    });
+
+    return subs;
+  }),
 });

@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { router, protectedProcedure, adminProcedure } from "../trpc";
+import { TRPCError } from "@trpc/server";
 import { agents, hosts, subscriptions } from "@/db";
 import { eq, and } from "drizzle-orm";
+import { PLATFORM_FEE_PERCENT } from "@/lib/constants";
 
 export const agentsRouter = router({
   // List agents for the current user
@@ -35,7 +37,10 @@ export const agentsRouter = router({
       });
 
       if (!agent || agent.userId !== ctx.user.id) {
-        throw new Error("Agent not found");
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Agent not found",
+        });
       }
 
       return agent;
@@ -57,7 +62,10 @@ export const agentsRouter = router({
       });
 
       if (!host) {
-        throw new Error("Host not available");
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Host not available",
+        });
       }
 
       // Create the agent
@@ -73,8 +81,8 @@ export const agentsRouter = router({
         .returning();
 
       // Create the subscription
-      const platformFee = Math.round(host.pricePerMonth * 0.4); // 40%
-      const hostPayout = host.pricePerMonth - platformFee; // 60%
+      const platformFee = Math.round(host.pricePerMonth * (PLATFORM_FEE_PERCENT / 100));
+      const hostPayout = host.pricePerMonth - platformFee;
 
       await ctx.db.insert(subscriptions).values({
         userId: ctx.user.id,
@@ -108,7 +116,10 @@ export const agentsRouter = router({
       });
 
       if (!existing || existing.userId !== ctx.user.id) {
-        throw new Error("Agent not found");
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Agent not found",
+        });
       }
 
       const [updated] = await ctx.db
@@ -129,7 +140,10 @@ export const agentsRouter = router({
       });
 
       if (!existing || existing.userId !== ctx.user.id) {
-        throw new Error("Agent not found");
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Agent not found",
+        });
       }
 
       // TODO: Send stop command to host
@@ -152,11 +166,17 @@ export const agentsRouter = router({
       });
 
       if (!existing || existing.userId !== ctx.user.id) {
-        throw new Error("Agent not found");
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Agent not found",
+        });
       }
 
       if (!existing.hostId) {
-        throw new Error("Agent has no host assigned");
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Agent has no host assigned",
+        });
       }
 
       // TODO: Send start command to host
@@ -179,7 +199,10 @@ export const agentsRouter = router({
       });
 
       if (!existing || existing.userId !== ctx.user.id) {
-        throw new Error("Agent not found");
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Agent not found",
+        });
       }
 
       // TODO: Stop agent on host first
