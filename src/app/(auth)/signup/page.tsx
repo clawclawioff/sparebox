@@ -24,7 +24,7 @@ function SignupForm() {
   const [loading, setLoading] = useState(false);
 
   // tRPC mutation to set role after signup
-  const setRoleMutation = trpc.users.setRole.useMutation();
+  const setRoleMutation = trpc.users.setInitialRole.useMutation();
 
   const validateForm = (): string | null => {
     if (!role) {

@@ -5,9 +5,9 @@
  */
 
 import { z } from "zod";
-import { router, protectedProcedure, publicProcedure } from "../trpc";
+import { router, protectedProcedure } from "../trpc";
 import { user } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 export const usersRouter = router({
@@ -36,44 +36,38 @@ export const usersRouter = router({
   }),
 
   /**
-   * Set user role (can only be done once, right after signup)
+   * Set initial role (one-time, only if role is still default "user")
    * 
-   * This is called immediately after signup to set the user's role.
-   * Once set to 'host' or 'user', it cannot be changed without admin action.
+   * Called immediately after signup to set the user's chosen role.
+   * Cannot change role once set to "host". Prevents role escalation.
    */
-  setRole: protectedProcedure
+  setInitialRole: protectedProcedure
     .input(z.object({
       role: z.enum(["host", "user"]),
     }))
     .mutation(async ({ ctx, input }) => {
-      // Get current user
-      const currentUser = await ctx.db.query.user.findFirst({
-        where: eq(user.id, ctx.user.id),
-      });
-
-      if (!currentUser) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
-      }
-
-      // Only allow setting role if it's currently 'user' (default)
-      // This prevents users from switching roles freely
-      // Host -> User switching should require admin action
-      if (currentUser.role !== "user") {
-        throw new TRPCError({ 
-          code: "FORBIDDEN", 
-          message: "Role has already been set. Contact support to change it." 
-        });
-      }
-
-      // Update the role
+      // Only allow if role is still the default "user"
+      // This is a one-time operation right after signup
       const [updated] = await ctx.db
         .update(user)
         .set({ 
           role: input.role,
           updatedAt: new Date(),
         })
-        .where(eq(user.id, ctx.user.id))
+        .where(
+          and(
+            eq(user.id, ctx.user.id),
+            eq(user.role, "user"), // Only if still default role
+          )
+        )
         .returning();
+
+      if (!updated) {
+        throw new TRPCError({ 
+          code: "FORBIDDEN", 
+          message: "Role has already been set. Contact support to change it." 
+        });
+      }
 
       return {
         success: true,
