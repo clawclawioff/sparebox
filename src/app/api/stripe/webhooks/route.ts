@@ -166,38 +166,46 @@ async function handleCheckoutCompleted(session: any) {
     `[Stripe Webhook] Creating agent "${agentName}" for user ${userId} on host ${host.name}`
   );
 
-  // Create the agent
-  const [agent] = await db
-    .insert(agents)
-    .values({
-      name: agentName,
+  // Wrap agent + subscription creation in a transaction
+  await db.transaction(async (tx) => {
+    // Double-check idempotency inside transaction (race condition guard)
+    if (stripeSubscriptionId) {
+      const existingSub = await tx.query.subscriptions.findFirst({
+        where: eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId),
+      });
+      if (existingSub) {
+        console.log(`[Stripe Webhook] Subscription ${stripeSubscriptionId} already exists (race condition caught)`);
+        return;
+      }
+    }
+
+    const [agent] = await tx
+      .insert(agents)
+      .values({
+        name: agentName,
+        userId: userId,
+        hostId: hostId,
+        config: config || null,
+        status: "pending",
+      })
+      .returning();
+
+    const platformFee = Math.round(host.pricePerMonth * 0.4);
+    const hostPayout = host.pricePerMonth - platformFee;
+
+    await tx.insert(subscriptions).values({
       userId: userId,
-      hostId: hostId,
-      config: config || null,
-      status: "pending",
-    })
-    .returning();
+      agentId: agent.id,
+      hostId: host.id,
+      stripeSubscriptionId: stripeSubscriptionId,
+      pricePerMonth: host.pricePerMonth,
+      hostPayoutPerMonth: hostPayout,
+      platformFeePerMonth: platformFee,
+      status: "active",
+    });
 
-  console.log(`[Stripe Webhook] Agent created: ${agent.id}`);
-
-  // Create the subscription (60/40 split)
-  const platformFee = Math.round(host.pricePerMonth * 0.4);
-  const hostPayout = host.pricePerMonth - platformFee;
-
-  await db.insert(subscriptions).values({
-    userId: userId,
-    agentId: agent.id,
-    hostId: host.id,
-    stripeSubscriptionId: stripeSubscriptionId,
-    pricePerMonth: host.pricePerMonth,
-    hostPayoutPerMonth: hostPayout,
-    platformFeePerMonth: platformFee,
-    status: "active",
+    console.log(`[Stripe Webhook] Agent ${agent.id} + subscription created in transaction`);
   });
-
-  console.log(
-    `[Stripe Webhook] Subscription created for agent ${agent.id} (stripe: ${stripeSubscriptionId})`
-  );
 
   // Update user's stripeCustomerId if not set
   const stripeCustomerId = typeof session.customer === "string"
@@ -218,20 +226,22 @@ async function handleCheckoutCompleted(session: any) {
 async function handleSubscriptionDeleted(subscription: any) {
   console.log(`[Stripe Webhook] Subscription deleted: ${subscription.id}`);
 
-  const result = await db
+  const [sub] = await db
     .update(subscriptions)
     .set({ status: "canceled", canceledAt: new Date() })
     .where(eq(subscriptions.stripeSubscriptionId, subscription.id))
     .returning();
 
-  if (result.length === 0) {
-    console.log(
-      `[Stripe Webhook] No matching subscription found for ${subscription.id}`
-    );
+  if (sub) {
+    // Stop the associated agent
+    await db
+      .update(agents)
+      .set({ status: "stopped", updatedAt: new Date() })
+      .where(eq(agents.id, sub.agentId));
+    
+    console.log(`[Stripe Webhook] Stopped agent ${sub.agentId} (subscription canceled)`);
   } else {
-    console.log(
-      `[Stripe Webhook] Marked subscription ${result[0].id} as canceled`
-    );
+    console.log(`[Stripe Webhook] No matching subscription found for ${subscription.id}`);
   }
 }
 
@@ -294,15 +304,15 @@ async function handlePaymentFailed(invoice: any) {
 
   if (!subId) return;
 
-  const result = await db
+  const [sub] = await db
     .update(subscriptions)
     .set({ status: "past_due" })
     .where(eq(subscriptions.stripeSubscriptionId, subId))
     .returning();
 
-  if (result.length > 0) {
+  if (sub) {
     console.log(
-      `[Stripe Webhook] Marked subscription ${result[0].id} as past_due`
+      `[Stripe Webhook] Marked subscription ${sub.id} as past_due (agent ${sub.agentId} still running - manual intervention may be required)`
     );
   }
 }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../trpc";
+import { router, protectedProcedure, adminProcedure } from "../trpc";
 import { agents, hosts, subscriptions } from "@/db";
 import { eq, and } from "drizzle-orm";
 
@@ -41,8 +41,8 @@ export const agentsRouter = router({
       return agent;
     }),
 
-  // Create/deploy a new agent
-  create: protectedProcedure
+  // Create/deploy a new agent (admin only - normal flow is via Stripe checkout)
+  create: adminProcedure
     .input(
       z.object({
         name: z.string().min(1).max(100),

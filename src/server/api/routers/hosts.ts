@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { router, protectedProcedure } from "../trpc";
+import { router, protectedProcedure, hostProcedure } from "../trpc";
 import { hosts, hostHeartbeats, agents, subscriptions } from "@/db";
-import { eq, desc, and, gte, sql } from "drizzle-orm";
+import { eq, desc, and, gte, sql, not } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 
 export const hostsRouter = router({
   // List hosts for the current user
@@ -31,7 +32,7 @@ export const hostsRouter = router({
     }),
 
   // Create a new host
-  create: protectedProcedure
+  create: hostProcedure
     .input(
       z.object({
         name: z.string().min(1).max(100),
@@ -92,7 +93,7 @@ export const hostsRouter = router({
     }),
 
   // Delete a host
-  delete: protectedProcedure
+  delete: hostProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.db.query.hosts.findFirst({
@@ -100,7 +101,22 @@ export const hostsRouter = router({
       });
 
       if (!existing || existing.userId !== ctx.user.id) {
-        throw new Error("Host not found");
+        throw new TRPCError({ code: "NOT_FOUND", message: "Host not found" });
+      }
+
+      // Check for active agents
+      const activeAgents = await ctx.db.query.agents.findMany({
+        where: and(
+          eq(agents.hostId, input.id),
+          not(eq(agents.status, "stopped"))
+        ),
+      });
+
+      if (activeAgents.length > 0) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: `Cannot delete host with ${activeAgents.length} active agent(s). Stop or migrate them first.`,
+        });
       }
 
       await ctx.db.delete(hosts).where(eq(hosts.id, input.id));
