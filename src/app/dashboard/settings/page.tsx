@@ -1,11 +1,11 @@
 "use client";
 
-import { useSession } from "@/lib/auth-client";
+import { useSession, signIn } from "@/lib/auth-client";
 import { trpc } from "@/lib/trpc";
 import { PasswordInput } from "@/components/ui/password-input";
 import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
-import { User, Shield, Bell, Trash2, Loader2, Check, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { User, Shield, Bell, Trash2, Loader2, Check, AlertTriangle, Github } from "lucide-react";
 
 // =============================================================================
 // Settings Page
@@ -67,6 +67,38 @@ function ProfileTab({ utils }: { utils: ReturnType<typeof trpc.useUtils> }) {
 
   const [name, setName] = useState("");
   const [profileSaved, setProfileSaved] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/avatar", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      utils.users.me.invalidate();
+    } catch (err: any) {
+      console.error("Upload failed:", err.message);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleAvatarRemove = async () => {
+    try {
+      await fetch("/api/avatar", { method: "DELETE" });
+      utils.users.me.invalidate();
+    } catch (err) {
+      console.error("Remove failed:", err);
+    }
+  };
 
   // Sync name from query data
   useEffect(() => {
@@ -105,12 +137,14 @@ function ProfileTab({ utils }: { utils: ReturnType<typeof trpc.useUtils> }) {
               Profile Picture
             </label>
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-                {(meQuery.data?.image || session?.user?.image) ? (
+              <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                {uploading ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                ) : (meQuery.data?.image || session?.user?.image) ? (
                   <img
                     src={meQuery.data?.image || session?.user?.image || ""}
                     alt=""
-                    className="w-16 h-16 rounded-full"
+                    className="w-16 h-16 rounded-full object-cover"
                   />
                 ) : (
                   <span className="text-2xl text-muted-foreground">
@@ -119,11 +153,25 @@ function ProfileTab({ utils }: { utils: ReturnType<typeof trpc.useUtils> }) {
                 )}
               </div>
               <div>
-                <button className="text-sm text-primary hover:text-primary/80">
-                  Upload new
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handleAvatarUpload}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="text-sm text-primary hover:text-primary/80"
+                >
+                  {uploading ? "Uploading..." : "Upload new"}
                 </button>
                 <span className="text-muted-foreground mx-2">•</span>
-                <button className="text-sm text-muted-foreground hover:text-foreground">
+                <button
+                  onClick={handleAvatarRemove}
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
                   Remove
                 </button>
               </div>
@@ -208,6 +256,22 @@ function AccountTab() {
   const { data: session } = useSession();
   const meQuery = trpc.users.me.useQuery();
   const router = useRouter();
+
+  // Connected accounts state
+  const [linkedAccounts, setLinkedAccounts] = useState<Array<{ providerId: string; accountId: string }>>([]);
+  const [accountsLoading, setAccountsLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/auth/list-accounts", { credentials: "include" })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setLinkedAccounts(data);
+        }
+        setAccountsLoading(false);
+      })
+      .catch(() => setAccountsLoading(false));
+  }, []);
 
   // Change password state
   const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -311,119 +375,153 @@ function AccountTab() {
           Manage your password and connected accounts
         </p>
 
-        {/* Password */}
-        <div className="mb-6">
-          {!showPasswordForm ? (
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-foreground font-medium">Password</p>
-                <p className="text-sm text-muted-foreground">••••••••</p>
-              </div>
-              <button
-                onClick={() => setShowPasswordForm(true)}
-                className="text-sm text-primary hover:text-primary/80"
-              >
-                Change Password
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-foreground font-medium">Change Password</p>
+        {/* Password - Only show if user has a credential account */}
+        {linkedAccounts.some(a => a.providerId === "credential") && (
+          <div className="mb-6">
+            {!showPasswordForm ? (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-foreground font-medium">Password</p>
+                  <p className="text-sm text-muted-foreground">••••••••</p>
+                </div>
                 <button
-                  onClick={() => {
-                    setShowPasswordForm(false);
-                    setPasswordError("");
-                    setCurrentPassword("");
-                    setNewPassword("");
-                    setConfirmPassword("");
-                  }}
-                  className="text-sm text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowPasswordForm(true)}
+                  className="text-sm text-primary hover:text-primary/80"
                 >
-                  Cancel
+                  Change Password
                 </button>
               </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-foreground font-medium">Change Password</p>
+                  <button
+                    onClick={() => {
+                      setShowPasswordForm(false);
+                      setPasswordError("");
+                      setCurrentPassword("");
+                      setNewPassword("");
+                      setConfirmPassword("");
+                    }}
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    Cancel
+                  </button>
+                </div>
 
-              <PasswordInput
-                label="Current Password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Enter current password"
-              />
-              <PasswordInput
-                label="New Password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Enter new password"
-                hint="Minimum 8 characters"
-              />
-              <PasswordInput
-                label="Confirm New Password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm new password"
-                error={
-                  confirmPassword && newPassword !== confirmPassword
-                    ? "Passwords do not match"
-                    : undefined
-                }
-              />
+                <PasswordInput
+                  label="Current Password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
+                />
+                <PasswordInput
+                  label="New Password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  hint="Minimum 8 characters"
+                />
+                <PasswordInput
+                  label="Confirm New Password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  error={
+                    confirmPassword && newPassword !== confirmPassword
+                      ? "Passwords do not match"
+                      : undefined
+                  }
+                />
 
-              {passwordError && (
-                <p className="text-sm text-destructive">{passwordError}</p>
-              )}
-              {passwordSuccess && (
-                <p className="inline-flex items-center gap-1 text-sm text-primary">
-                  <Check className="w-4 h-4" />
-                  Password changed successfully!
-                </p>
-              )}
+                {passwordError && (
+                  <p className="text-sm text-destructive">{passwordError}</p>
+                )}
+                {passwordSuccess && (
+                  <p className="inline-flex items-center gap-1 text-sm text-primary">
+                    <Check className="w-4 h-4" />
+                    Password changed successfully!
+                  </p>
+                )}
 
-              <button
-                onClick={handleChangePassword}
-                disabled={passwordLoading || !currentPassword || !newPassword || !confirmPassword}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-primary-foreground font-medium rounded-lg transition-colors"
-              >
-                {passwordLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                Update Password
-              </button>
-            </div>
-          )}
-        </div>
+                <button
+                  onClick={handleChangePassword}
+                  disabled={passwordLoading || !currentPassword || !newPassword || !confirmPassword}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-primary-foreground font-medium rounded-lg transition-colors"
+                >
+                  {passwordLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Update Password
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Connected Accounts */}
         <div>
           <p className="text-foreground font-medium mb-4">Connected Accounts</p>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-muted rounded flex items-center justify-center text-muted-foreground">
-                  G
-                </div>
-                <span className="text-foreground">Google</span>
-              </div>
-              <button
-                disabled
-                className="text-sm text-muted-foreground cursor-not-allowed"
-              >
-                Coming Soon
-              </button>
+          {accountsLoading ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
             </div>
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-muted rounded flex items-center justify-center text-muted-foreground">
-                  GH
+          ) : (
+            <div className="space-y-3">
+              {/* GitHub */}
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-muted rounded flex items-center justify-center text-muted-foreground">
+                    <Github className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-foreground">GitHub</span>
+                    {linkedAccounts.some(a => a.providerId === "github") && (
+                      <p className="text-xs text-muted-foreground">Connected</p>
+                    )}
+                  </div>
                 </div>
-                <span className="text-foreground">GitHub</span>
+                {linkedAccounts.some(a => a.providerId === "github") ? (
+                  <span className="text-xs text-primary font-medium px-2 py-1 bg-primary/10 rounded">Connected</span>
+                ) : (
+                  <button
+                    onClick={() => signIn.social({ provider: "github", callbackURL: "/dashboard/settings" })}
+                    className="text-sm text-primary hover:text-primary/80 font-medium"
+                  >
+                    Connect
+                  </button>
+                )}
               </div>
-              <button
-                disabled
-                className="text-sm text-muted-foreground cursor-not-allowed"
-              >
-                Coming Soon
-              </button>
+
+              {/* Google */}
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-muted rounded flex items-center justify-center">
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <span className="text-foreground">Google</span>
+                    {linkedAccounts.some(a => a.providerId === "google") && (
+                      <p className="text-xs text-muted-foreground">Connected</p>
+                    )}
+                  </div>
+                </div>
+                {linkedAccounts.some(a => a.providerId === "google") ? (
+                  <span className="text-xs text-primary font-medium px-2 py-1 bg-primary/10 rounded">Connected</span>
+                ) : (
+                  <button
+                    onClick={() => signIn.social({ provider: "google", callbackURL: "/dashboard/settings" })}
+                    className="text-sm text-primary hover:text-primary/80 font-medium"
+                  >
+                    Connect
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
