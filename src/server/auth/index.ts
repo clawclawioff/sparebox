@@ -93,7 +93,17 @@ export const auth = betterAuth({
         type: "string",
         required: false,
         defaultValue: "user",
-        input: false, // Not settable during signup
+        input: false,
+      },
+      stripeCustomerId: {
+        type: "string",
+        required: false,
+        input: false,
+      },
+      stripeConnectAccountId: {
+        type: "string",
+        required: false,
+        input: false,
       },
     },
     deleteUser: {
