@@ -21,7 +21,8 @@ export default function RoleSelectionPage() {
       return;
     }
     // If user already has a non-default role, skip to dashboard
-    if (session?.user?.role && session.user.role !== "user") {
+    const userRole = (session?.user as any)?.role;
+    if (userRole && userRole !== "user") {
       router.push("/dashboard");
     }
   }, [session, isPending, router]);

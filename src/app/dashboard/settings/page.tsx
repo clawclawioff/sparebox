@@ -285,6 +285,7 @@ function AccountTab() {
   // Delete account state
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
@@ -334,28 +335,35 @@ function AccountTab() {
     }
   };
 
+  const hasPassword = linkedAccounts.some(a => a.providerId === "credential");
+
   const handleDeleteAccount = async () => {
     setDeleteError("");
 
-    if (!deletePassword) {
+    if (hasPassword && !deletePassword) {
       setDeleteError("Please enter your password to confirm.");
+      return;
+    }
+    if (!hasPassword && deleteConfirmText !== "DELETE") {
+      setDeleteError('Please type "DELETE" to confirm.');
       return;
     }
 
     setDeleteLoading(true);
     try {
+      const body = hasPassword ? { password: deletePassword } : {};
+
       const res = await fetch("/api/auth/delete-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: deletePassword }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.message || "Failed to delete account. Check your password.");
+        throw new Error(data?.message || "Failed to delete account.");
       }
 
-      // Redirect to landing page
       router.push("/");
     } catch (err: any) {
       setDeleteError(err.message || "Something went wrong.");
@@ -558,15 +566,31 @@ function AccountTab() {
               This action is <strong className="text-foreground">permanent</strong> and cannot be undone.
               All your data, agents, subscriptions, and settings will be deleted.
             </p>
-            <p className="text-sm text-muted-foreground mb-4">
-              Enter your password to confirm:
-            </p>
-
-            <PasswordInput
-              value={deletePassword}
-              onChange={(e) => setDeletePassword(e.target.value)}
-              placeholder="Enter your password"
-            />
+            {hasPassword ? (
+              <>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Enter your password to confirm:
+                </p>
+                <PasswordInput
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  placeholder="Enter your password"
+                />
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Type <strong className="text-foreground">DELETE</strong> to confirm:
+                </p>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder='Type "DELETE"'
+                  className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </>
+            )}
 
             {deleteError && (
               <p className="text-sm text-destructive mt-2">{deleteError}</p>
@@ -577,6 +601,7 @@ function AccountTab() {
                 onClick={() => {
                   setShowDeleteDialog(false);
                   setDeletePassword("");
+                  setDeleteConfirmText("");
                   setDeleteError("");
                 }}
                 className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground rounded-lg transition-colors"
@@ -585,7 +610,7 @@ function AccountTab() {
               </button>
               <button
                 onClick={handleDeleteAccount}
-                disabled={deleteLoading || !deletePassword}
+                disabled={deleteLoading || (hasPassword ? !deletePassword : deleteConfirmText !== "DELETE")}
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-destructive hover:bg-destructive/90 disabled:bg-destructive/50 text-destructive-foreground rounded-lg transition-colors"
               >
                 {deleteLoading && <Loader2 className="w-4 h-4 animate-spin" />}
