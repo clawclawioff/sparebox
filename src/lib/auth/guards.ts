@@ -49,7 +49,8 @@ export async function requireAuth(options?: {
     redirect(`/login${callbackUrl}`)
   }
 
-  // Redirect unverified email users (unless explicitly allowed)
+  // Redirect unverified email users to verification page
+  // Skip if explicitly allowed (e.g., the verify-email page itself)
   if (!options?.allowUnverified && !session.user.emailVerified) {
     redirect('/verify-email')
   }

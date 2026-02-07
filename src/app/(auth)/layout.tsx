@@ -1,33 +1,17 @@
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth/session";
 import { SpareboxLogo } from "@/components/sparebox-logo";
 
 /**
- * Auth Layout - For login/signup pages
+ * Auth Layout - For login, signup, verify-email, onboarding pages
  * 
- * This layout:
- * 1. Redirects authenticated users to /dashboard (except for verify-email and onboarding)
- * 2. Provides a clean centered layout for auth forms
+ * Auth redirects (logged-in users away from login/signup, unauthenticated
+ * users away from protected routes) are handled by proxy.ts.
+ * This layout just provides the centered UI shell.
  */
 export default async function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getSession();
-  const headersList = await headers();
-  const pathname = headersList.get("x-pathname") || "";
-  
-  // Allow logged-in users on these paths (they need the session)
-  const allowAuthenticatedPaths = ["/verify-email", "/onboarding"];
-  const isAllowedPath = allowAuthenticatedPaths.some(p => pathname.startsWith(p));
-  
-  // Redirect logged-in verified users away from auth pages (unless on allowed path)
-  if (session && !isAllowedPath) {
-    redirect("/dashboard");
-  }
-
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Subtle gradient background */}
