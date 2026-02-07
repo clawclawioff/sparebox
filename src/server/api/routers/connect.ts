@@ -94,27 +94,31 @@ export const connectRouter = router({
     return { url: loginLink.url };
   }),
 
-  // Get recent payouts/transfers for the host
+  // Get recent earnings for the host (using connected account balance transactions)
   getPayouts: hostProcedure.query(async ({ ctx }) => {
     if (!ctx.user.stripeConnectAccountId) {
-      return { transfers: [], totalEarnings: 0 };
+      return { transactions: [], totalEarnings: 0 };
     }
 
     try {
-      const transfers = await getStripe().transfers.list({
-        destination: ctx.user.stripeConnectAccountId,
-        limit: 20,
-      });
+      // Fetch balance transactions from the connected account
+      // The 'net' field reflects the host's actual take-home (after application fee)
+      const balanceTransactions = await getStripe().balanceTransactions.list(
+        { limit: 100, type: "payment" },
+        { stripeAccount: ctx.user.stripeConnectAccountId }
+      );
 
-      const totalEarnings = transfers.data.reduce(
-        (sum, t) => sum + t.amount,
+      const totalEarnings = balanceTransactions.data.reduce(
+        (sum, t) => sum + t.net,
         0
       );
 
       return {
-        transfers: transfers.data.map((t) => ({
+        transactions: balanceTransactions.data.map((t) => ({
           id: t.id,
-          amount: t.amount,
+          amount: t.net, // Net amount after application fee (host's 60%)
+          gross: t.amount,
+          fee: t.fee, // Application fee (platform's 40%)
           currency: t.currency,
           created: t.created,
           description: t.description,
@@ -122,7 +126,7 @@ export const connectRouter = router({
         totalEarnings,
       };
     } catch {
-      return { transfers: [], totalEarnings: 0 };
+      return { transactions: [], totalEarnings: 0 };
     }
   }),
 });

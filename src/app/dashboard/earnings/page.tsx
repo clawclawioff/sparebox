@@ -218,13 +218,13 @@ function EarningsContent() {
             </div>
             <div className="bg-card border border-border rounded-xl p-6">
               <p className="text-sm text-muted-foreground">
-                Recent Transfers
+                Transactions
               </p>
               <p className="text-2xl font-bold text-foreground mt-1">
-                {payoutsData?.transfers.length ?? 0}
+                {payoutsData?.transactions.length ?? 0}
               </p>
               <p className="text-xs text-muted-foreground/70 mt-1">
-                Last 20 transfers
+                Total payments received
               </p>
             </div>
             <div className="bg-card border border-border rounded-xl p-6">
@@ -278,33 +278,33 @@ function EarningsContent() {
             )}
           </div>
 
-          {/* Recent Transfers */}
+          {/* Recent Transactions */}
           <div className="bg-card border border-border rounded-xl p-6">
             <h2 className="text-lg font-semibold text-foreground mb-4">
-              Recent Transfers
+              Recent Transactions
             </h2>
             {payoutsLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
               </div>
-            ) : !payoutsData?.transfers.length ? (
+            ) : !payoutsData?.transactions.length ? (
               <p className="text-muted-foreground">
-                No transfers yet. You&apos;ll see payouts here once users deploy
-                agents on your machines.
+                No transactions yet. You&apos;ll see earnings here once users
+                deploy agents on your machines.
               </p>
             ) : (
               <div className="space-y-3">
-                {payoutsData.transfers.map((transfer) => (
+                {payoutsData.transactions.map((tx) => (
                   <div
-                    key={transfer.id}
+                    key={tx.id}
                     className="flex items-center justify-between py-3 border-b border-border last:border-0"
                   >
                     <div>
                       <p className="text-sm font-medium text-foreground">
-                        {transfer.description || "Agent hosting payout"}
+                        {tx.description || "Agent hosting payment"}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(transfer.created * 1000).toLocaleDateString(
+                        {new Date(tx.created * 1000).toLocaleDateString(
                           undefined,
                           {
                             year: "numeric",
@@ -314,13 +314,19 @@ function EarningsContent() {
                         )}
                       </p>
                     </div>
-                    <p className="text-sm font-semibold text-foreground">
-                      +$
-                      {(transfer.amount / 100).toFixed(2)}{" "}
-                      <span className="text-muted-foreground font-normal uppercase">
-                        {transfer.currency}
-                      </span>
-                    </p>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-foreground">
+                        +${(tx.amount / 100).toFixed(2)}{" "}
+                        <span className="text-muted-foreground font-normal uppercase">
+                          {tx.currency}
+                        </span>
+                      </p>
+                      {tx.fee > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          ${(tx.gross / 100).toFixed(2)} gross − ${(tx.fee / 100).toFixed(2)} platform fee
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
