@@ -213,7 +213,7 @@ function EarningsContent() {
                 {((payoutsData?.totalEarnings ?? 0) / 100).toFixed(2)}
               </p>
               <p className="text-xs text-muted-foreground/70 mt-1">
-                Since you joined
+                Your 60% share of hosting revenue
               </p>
             </div>
             <div className="bg-card border border-border rounded-xl p-6">
