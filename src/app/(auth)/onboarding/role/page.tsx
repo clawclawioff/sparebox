@@ -9,7 +9,7 @@ import { Server, Cpu, Loader2 } from "lucide-react";
 export default function RoleSelectionPage() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
-  const [role, setRole] = useState<"host" | "user" | "">("");
+  const [role, setRole] = useState<"host" | "deployer" | "">("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -22,7 +22,7 @@ export default function RoleSelectionPage() {
     }
     // If user already has a non-default role, skip to dashboard
     const userRole = (session?.user as any)?.role;
-    if (userRole && userRole !== "user") {
+    if (userRole && userRole !== "default") {
       router.push("/dashboard");
     }
   }, [session, isPending, router]);
@@ -80,14 +80,14 @@ export default function RoleSelectionPage() {
           </button>
           <button
             type="button"
-            onClick={() => setRole("user")}
+            onClick={() => setRole("deployer")}
             className={`p-4 rounded-lg border text-left transition ${
-              role === "user"
+              role === "deployer"
                 ? "border-primary bg-primary/10"
                 : "border-border bg-card hover:border-border/80 hover:bg-accent"
             }`}
           >
-            <Cpu className={`w-5 h-5 mb-2 ${role === "user" ? "text-primary" : "text-muted-foreground"}`} />
+            <Cpu className={`w-5 h-5 mb-2 ${role === "deployer" ? "text-primary" : "text-muted-foreground"}`} />
             <div className="font-medium text-foreground">Deploy agents</div>
             <div className="text-xs text-muted-foreground mt-1">Run your AI on Sparebox</div>
           </button>

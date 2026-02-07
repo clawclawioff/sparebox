@@ -15,7 +15,7 @@ import { db } from '@/db'
 import { user } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 
-export type UserRole = 'user' | 'host' | 'admin'
+export type UserRole = 'default' | 'deployer' | 'host' | 'admin'
 
 export interface SessionUser {
   id: string
@@ -70,7 +70,7 @@ export async function getSession(): Promise<Session | null> {
       columns: { role: true },
     })
     
-    const actualRole = (userData?.role as UserRole) || 'user'
+    const actualRole = (userData?.role as UserRole) || 'default'
     
     // Map to our Session type
     const session: Session = {
@@ -147,5 +147,5 @@ export function isHost(user: SessionUser): boolean {
  * Check if user can access user-only features
  */
 export function isUser(user: SessionUser): boolean {
-  return hasRole(user, ['user', 'admin'])
+  return hasRole(user, ['deployer', 'admin'])
 }

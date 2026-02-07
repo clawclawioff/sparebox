@@ -117,7 +117,7 @@ export default function Home() {
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Link>
             <Link
-              href="/signup?role=user"
+              href="/signup?role=deployer"
               className="bg-white hover:bg-stone-50 border border-stone-200 text-stone-700 px-8 py-4 rounded-xl font-medium text-lg transition shadow-sm"
             >
               Deploy an Agent

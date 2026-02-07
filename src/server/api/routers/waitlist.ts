@@ -6,7 +6,7 @@ export const waitlistRouter = router({
   join: publicProcedure
     .input(z.object({
       email: z.string().email(),
-      role: z.enum(["host", "user"]).optional(),
+      role: z.enum(["host", "deployer"]).optional(),
       source: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {

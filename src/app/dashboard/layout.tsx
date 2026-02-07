@@ -1,5 +1,6 @@
 import { requireAuth } from "@/lib/auth/guards";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { redirect } from "next/navigation";
 
 /**
  * Dashboard Layout - Protected by server-side auth
@@ -16,6 +17,11 @@ export default async function DashboardLayout({
 }) {
   // Server-side auth check - redirects if not logged in
   const session = await requireAuth();
+
+  // Redirect users who haven't picked a role yet
+  if (session.user.role === "default") {
+    redirect("/onboarding/role");
+  }
 
   return (
     <DashboardShell 

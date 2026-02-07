@@ -115,7 +115,7 @@ function ProfileTab({ utils }: { utils: ReturnType<typeof trpc.useUtils> }) {
     },
   });
 
-  const userRole = meQuery.data?.role || "user";
+  const userRole = meQuery.data?.role || "deployer";
 
   const handleSaveProfile = () => {
     updateMutation.mutate({ name });
@@ -682,7 +682,7 @@ function NotificationsTab() {
     updateMutation.mutate(prefs);
   };
 
-  const userRole = meQuery.data?.role || "user";
+  const userRole = meQuery.data?.role || "deployer";
 
   if (prefsQuery.isLoading) {
     return (
@@ -721,8 +721,8 @@ function NotificationsTab() {
           </div>
         </div>
 
-        {/* Agents (for user role) */}
-        {userRole === "user" && (
+        {/* Agents (for deployer role) */}
+        {userRole === "deployer" && (
           <div>
             <h3 className="text-sm font-medium text-foreground mb-3">Agents</h3>
             <div className="space-y-3">

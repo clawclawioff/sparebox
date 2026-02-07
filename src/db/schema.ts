@@ -11,7 +11,7 @@ import {
 import { relations } from "drizzle-orm";
 
 // Enums
-export const userRoleEnum = pgEnum("user_role", ["host", "user", "admin"]);
+export const userRoleEnum = pgEnum("user_role", ["default", "host", "deployer", "admin"]);
 export const hostStatusEnum = pgEnum("host_status", [
   "pending",
   "active",
@@ -46,7 +46,7 @@ export const user = pgTable("user", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   // Custom fields for Sparebox
-  role: userRoleEnum("role").notNull().default("user"),
+  role: userRoleEnum("role").notNull().default("default"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeConnectAccountId: text("stripe_connect_account_id"),
 });
@@ -228,7 +228,7 @@ export const userPreferences = pgTable("user_preferences", {
 export const waitlist = pgTable("waitlist", {
   id: uuid("id").defaultRandom().primaryKey(),
   email: text("email").notNull().unique(),
-  role: text("role"), // "host" or "user" — optional
+  role: text("role"), // "host" or "deployer" — optional
   source: text("source").default("landing"), // where they signed up from
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

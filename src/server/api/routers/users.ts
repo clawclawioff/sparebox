@@ -36,17 +36,17 @@ export const usersRouter = router({
   }),
 
   /**
-   * Set initial role (one-time, only if role is still default "user")
+   * Set initial role (one-time, only if role is still "default")
    * 
    * Called immediately after signup to set the user's chosen role.
-   * Cannot change role once set to "host". Prevents role escalation.
+   * Cannot change role once set. Prevents role escalation.
    */
   setInitialRole: protectedProcedure
     .input(z.object({
-      role: z.enum(["host", "user"]),
+      role: z.enum(["host", "deployer"]),
     }))
     .mutation(async ({ ctx, input }) => {
-      // Only allow if role is still the default "user"
+      // Only allow if role is still the default
       // This is a one-time operation right after signup
       const [updated] = await ctx.db
         .update(user)
@@ -57,7 +57,7 @@ export const usersRouter = router({
         .where(
           and(
             eq(user.id, ctx.user.id),
-            eq(user.role, "user"), // Only if still default role
+            eq(user.role, "default"), // Only if still default role
           )
         )
         .returning();

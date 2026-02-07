@@ -18,7 +18,7 @@ import type { Session, User } from "better-auth";
 // Types
 // =============================================================================
 
-export type UserRole = 'user' | 'host' | 'admin';
+export type UserRole = 'default' | 'deployer' | 'host' | 'admin';
 
 export interface AuthUser extends User {
   role: UserRole;
@@ -190,13 +190,13 @@ export const hostProcedure = t.procedure
   .use(enforceRole(['host', 'admin']));
 
 /**
- * User procedure - requires user or admin role  
+ * User procedure - requires deployer or admin role  
  * Use for: agent deployment, subscriptions, billing
- * Note: "user" is the default role for agent deployers
+ * Note: 'deployer' is the role for agent deployers
  */
 export const userProcedure = t.procedure
   .use(loggerMiddleware)
-  .use(enforceRole(['user', 'admin']));
+  .use(enforceRole(['deployer', 'admin']));
 
 /**
  * Admin procedure - requires admin role only

@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 
-type UserRole = "user" | "host" | "admin";
+type UserRole = "default" | "deployer" | "host" | "admin";
 
 interface User {
   id: string;
@@ -55,10 +55,10 @@ interface NavItem {
  */
 const navItems: NavItem[] = [
   { href: "/dashboard", label: "Overview", icon: Home },
-  // User (deployer) routes
-  { href: "/dashboard/agents", label: "My Agents", icon: Cpu, roles: ["user"] },
-  { href: "/dashboard/browse", label: "Browse Hosts", icon: Search, roles: ["user"] },
-  { href: "/dashboard/billing", label: "Billing", icon: CreditCard, roles: ["user"] },
+  // Deployer routes
+  { href: "/dashboard/agents", label: "My Agents", icon: Cpu, roles: ["deployer"] },
+  { href: "/dashboard/browse", label: "Browse Hosts", icon: Search, roles: ["deployer"] },
+  { href: "/dashboard/billing", label: "Billing", icon: CreditCard, roles: ["deployer"] },
   // Host routes
   { href: "/dashboard/hosts", label: "My Machines", icon: Server, roles: ["host"] },
   { href: "/dashboard/earnings", label: "Earnings", icon: DollarSign, roles: ["host"] },
@@ -98,13 +98,15 @@ export function DashboardShell({ children, user }: DashboardShellProps) {
   };
 
   const roleLabel = {
-    user: "Deployer",
+    default: "New User",
+    deployer: "Deployer",
     host: "Host",
     admin: "Admin",
   }[user.role];
 
   const roleClass = {
-    user: "role-user",
+    default: "role-user",
+    deployer: "role-user",
     host: "role-host",
     admin: "role-admin",
   }[user.role];

@@ -17,8 +17,8 @@ function SignupForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
-  const [role, setRole] = useState<"host" | "user" | "">(
-    initialRole === "host" || initialRole === "user" ? initialRole : ""
+  const [role, setRole] = useState<"host" | "deployer" | "">(
+    initialRole === "host" || initialRole === "deployer" ? initialRole : ""
   );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -70,7 +70,7 @@ function SignupForm() {
       await new Promise(resolve => setTimeout(resolve, 500));
       
       try {
-        await setRoleMutation.mutateAsync({ role: role as "host" | "user" });
+        await setRoleMutation.mutateAsync({ role: role as "host" | "deployer" });
       } catch (roleError: unknown) {
         // Role setting failed, but account was created
         console.error("Failed to set role:", roleError);
@@ -122,17 +122,17 @@ function SignupForm() {
               </button>
               <button
                 type="button"
-                onClick={() => setRole("user")}
+                onClick={() => setRole("deployer")}
                 className={`p-4 rounded-lg border text-left transition ${
-                  role === "user"
+                  role === "deployer"
                     ? "border-primary bg-primary/10"
                     : "border-border bg-card hover:border-border/80 hover:bg-accent"
                 }`}
               >
                 <Cpu
-                  className={`w-5 h-5 mb-2 ${role === "user" ? "text-primary" : "text-muted-foreground"}`}
+                  className={`w-5 h-5 mb-2 ${role === "deployer" ? "text-primary" : "text-muted-foreground"}`}
                 />
-                <div className={`font-medium ${role === "user" ? "text-foreground" : "text-foreground"}`}>
+                <div className={`font-medium ${role === "deployer" ? "text-foreground" : "text-foreground"}`}>
                   Deploy agents
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">Run your AI on Sparebox</div>

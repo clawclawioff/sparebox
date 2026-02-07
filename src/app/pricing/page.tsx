@@ -88,7 +88,7 @@ export default function PricingPage() {
             </ul>
 
             <Link
-              href="/signup?role=user"
+              href="/signup?role=deployer"
               className="block w-full text-center bg-stone-100 hover:bg-stone-200 border border-stone-200 text-stone-900 py-3 rounded-xl font-medium transition"
             >
               Deploy an Agent
