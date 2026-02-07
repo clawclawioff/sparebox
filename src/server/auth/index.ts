@@ -51,7 +51,10 @@ export const auth = betterAuth({
     sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
       const resend = getResend();
       if (!resend) return;
-      const html = await render(VerifyEmail({ url }));
+      // Replace the default callbackURL with our email-verified page
+      const verifyUrl = new URL(url);
+      verifyUrl.searchParams.set("callbackURL", "/email-verified");
+      const html = await render(VerifyEmail({ url: verifyUrl.toString() }));
       await resend.emails.send({
         from: FROM_EMAIL,
         to: user.email,

@@ -21,12 +21,14 @@ const PUBLIC_PATHS = [
 // Auth pages where logged-in users should NOT be redirected away
 const AUTH_ALLOWED_WHEN_LOGGED_IN = [
   "/verify-email",
+  "/email-verified",
   "/onboarding",
 ];
 
 // Pages that require auth but allow unverified email
 const ALLOW_UNVERIFIED = [
   "/verify-email",
+  "/email-verified",
   "/onboarding",
 ];
 
