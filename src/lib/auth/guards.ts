@@ -38,6 +38,7 @@ export type AuthGuard = () => Promise<AuthGuardResult>
  */
 export async function requireAuth(options?: {
   redirectTo?: string
+  allowUnverified?: boolean
 }): Promise<Session> {
   const session = await getSession()
   
@@ -46,6 +47,11 @@ export async function requireAuth(options?: {
       ? `?callbackUrl=${encodeURIComponent(options.redirectTo)}`
       : ''
     redirect(`/login${callbackUrl}`)
+  }
+
+  // Redirect unverified email users (unless explicitly allowed)
+  if (!options?.allowUnverified && !session.user.emailVerified) {
+    redirect('/verify-email')
   }
   
   return session

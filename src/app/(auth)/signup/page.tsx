@@ -233,7 +233,7 @@ function SignupForm() {
         <div className="grid grid-cols-2 gap-3">
           <button
             type="button"
-            onClick={() => signIn.social({ provider: "github", callbackURL: "/dashboard" })}
+            onClick={() => signIn.social({ provider: "github", callbackURL: "/onboarding/role" })}
             disabled={loading}
             className="flex items-center justify-center gap-2 px-4 py-2.5 border border-border rounded-lg bg-background hover:bg-accent text-foreground text-sm font-medium transition disabled:opacity-50"
           >
@@ -242,7 +242,7 @@ function SignupForm() {
           </button>
           <button
             type="button"
-            onClick={() => signIn.social({ provider: "google", callbackURL: "/dashboard" })}
+            onClick={() => signIn.social({ provider: "google", callbackURL: "/onboarding/role" })}
             disabled={loading}
             className="flex items-center justify-center gap-2 px-4 py-2.5 border border-border rounded-lg bg-background hover:bg-accent text-foreground text-sm font-medium transition disabled:opacity-50"
           >
