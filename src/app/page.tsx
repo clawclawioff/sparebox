@@ -293,8 +293,16 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <SpareboxLogo variant="full" size="sm" />
           </div>
+          <div className="flex items-center gap-6">
+            <Link href="/privacy-policy" className="text-stone-500 hover:text-stone-700 text-sm transition">
+              Privacy Policy
+            </Link>
+            <Link href="/terms-of-service" className="text-stone-500 hover:text-stone-700 text-sm transition">
+              Terms of Service
+            </Link>
+          </div>
           <p className="text-stone-500 text-sm">
-            © 2026 Sparebox. Open infrastructure for personal AI.
+            © 2026 Sparebox
           </p>
         </div>
       </footer>
