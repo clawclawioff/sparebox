@@ -131,10 +131,63 @@ checkout.session.completed → Create agent + subscription in DB
 - Decline: `4000 0000 0000 0002`
 - Requires auth: `4000 0025 0000 3155`
 
+## Stripe Connect (Host Payouts)
+
+### Architecture
+- Hosts onboard via Stripe Connect (Express-like accounts using controller properties)
+- Platform creates connected accounts with: platform covers losses + fees, Express dashboard, Stripe handles requirements
+- Checkout sessions use `subscription_data.transfer_data.destination` to route funds
+- Platform keeps 40% as `application_fee_percent`
+- Hosts get 60% automatically via destination charges
+
+### Onboarding Flow
+1. Host goes to `/dashboard/earnings`
+2. Clicks "Set up payouts"
+3. tRPC: `connect.createConnectAccount`
+4. Server: Creates Stripe Connect account + account link
+5. Redirect to Stripe-hosted onboarding (identity, bank account)
+6. Host returns to `/dashboard/earnings?onboarded=true`
+7. Once `payouts_enabled`, they receive automatic transfers
+
+### Connect Account Creation
+```
+controller: {
+  losses: { payments: "application" },        // Platform covers negative balances
+  fees: { payer: "application" },              // Platform pays Stripe fees
+  stripe_dashboard: { type: "express" },       // Express dashboard for hosts
+  requirement_collection: "stripe",            // Stripe handles onboarding requirements
+}
+capabilities: { transfers: { requested: true } }
+```
+
+### Connect Router (`src/server/api/routers/connect.ts`)
+| Procedure | Type | Description |
+|-----------|------|-------------|
+| `createConnectAccount` | mutation | Creates Connect account + returns onboarding URL |
+| `getAccountStatus` | query | Returns account status (not_created, onboarding_incomplete, pending, active) |
+| `createDashboardLink` | mutation | Creates Express Dashboard login link |
+| `getPayouts` | query | Lists recent transfers + total earnings |
+
+### Destination Charges
+When creating checkout sessions in `billing.ts`:
+- If host has `stripeConnectAccountId`, adds `subscription_data.transfer_data.destination`
+- `application_fee_percent: 40` — platform keeps 40%
+- If host has no Connect account, checkout still works but funds stay on platform
+
+### Webhook Events (Connect)
+- `account.updated` — Connected account onboarding status changes (logged for now)
+
+### Files
+| File | Purpose |
+|------|---------|
+| `src/server/api/routers/connect.ts` | Connect onboarding + earnings queries |
+| `src/app/dashboard/earnings/page.tsx` | Earnings dashboard + onboarding UI |
+
 ## TODO
 - [ ] Fix webhook (currently not processing — likely signing secret mismatch)
 - [ ] Add idempotency checks
-- [ ] Stripe Connect for host payouts
+- [x] Stripe Connect for host payouts
 - [ ] Customer portal for subscription management
 - [ ] Usage-based billing option
 - [ ] Switch to production keys before launch
+- [ ] Separate webhook endpoint for Connected account events (currently sharing main endpoint)

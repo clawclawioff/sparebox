@@ -85,6 +85,18 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      case "account.updated": {
+        // Connected account was updated (onboarding completed, etc.)
+        const account = event.data.object as any;
+        if (account.metadata?.sparebox_user_id) {
+          console.log(
+            `[Stripe Webhook] Connect account updated: ${account.id} (user: ${account.metadata.sparebox_user_id})`
+          );
+          // Could update user record or send notification in the future
+        }
+        break;
+      }
+
       default:
         console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
     }

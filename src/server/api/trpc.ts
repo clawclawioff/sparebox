@@ -22,6 +22,8 @@ export type UserRole = 'user' | 'host' | 'admin';
 
 export interface AuthUser extends User {
   role: UserRole;
+  stripeCustomerId: string | null;
+  stripeConnectAccountId: string | null;
 }
 
 export interface AuthSession extends Session {

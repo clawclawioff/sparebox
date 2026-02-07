@@ -1,8 +1,11 @@
 import { z } from "zod";
 import { router, protectedProcedure } from "../trpc";
 import { getStripe } from "@/lib/stripe";
-import { hosts } from "@/db/schema";
+import { hosts, user } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+
+// Platform keeps 40%, host gets 60%
+const APPLICATION_FEE_PERCENT = 40;
 
 export const billingRouter = router({
   createCheckoutSession: protectedProcedure
@@ -21,6 +24,20 @@ export const billingRouter = router({
 
       if (!host) {
         throw new Error("Host not available");
+      }
+
+      // Look up the host's user to get their Connect account
+      const hostUser = await ctx.db.query.user.findFirst({
+        where: eq(user.id, host.userId),
+      });
+
+      // Build subscription_data — route funds to host if they have a Connect account
+      const subscriptionData: Record<string, unknown> = {};
+      if (hostUser?.stripeConnectAccountId) {
+        subscriptionData.application_fee_percent = APPLICATION_FEE_PERCENT;
+        subscriptionData.transfer_data = {
+          destination: hostUser.stripeConnectAccountId,
+        };
       }
 
       // Create Stripe Checkout session
@@ -44,6 +61,9 @@ export const billingRouter = router({
             quantity: 1,
           },
         ],
+        ...(Object.keys(subscriptionData).length > 0
+          ? { subscription_data: subscriptionData }
+          : {}),
         metadata: {
           userId: ctx.user.id,
           agentName: input.agentName,
