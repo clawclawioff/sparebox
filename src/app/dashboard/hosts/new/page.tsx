@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Check, Copy, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, Loader2, Key, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 export default function AddHostPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [createdHostId, setCreatedHostId] = useState<string | null>(null);
+  const [generatedApiKey, setGeneratedApiKey] = useState<string | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [daemonConnected, setDaemonConnected] = useState(false);
 
   // Form state
   const [name, setName] = useState("");
@@ -27,6 +30,22 @@ export default function AddHostPage() {
   const [error, setError] = useState("");
 
   const createHost = trpc.hosts.create.useMutation();
+  const generateApiKey = trpc.hosts.generateApiKey.useMutation();
+
+  // Poll for daemon connection once we're on step 3
+  const { data: hostData } = trpc.hosts.get.useQuery(
+    { id: createdHostId! },
+    {
+      enabled: !!createdHostId && step === 3 && !daemonConnected,
+      refetchInterval: 5000,
+    }
+  );
+
+  useEffect(() => {
+    if (hostData?.lastHeartbeat) {
+      setDaemonConnected(true);
+    }
+  }, [hostData?.lastHeartbeat]);
 
   const canProceedStep1 = name.trim().length >= 1 && cpuCores > 0 && ramGb >= 4;
   const canProceedStep2 = pricePerMonth >= 500;
@@ -52,6 +71,16 @@ export default function AddHostPage() {
       });
 
       setCreatedHostId(host.id);
+
+      // Auto-generate API key
+      try {
+        const keyResult = await generateApiKey.mutateAsync({ hostId: host.id });
+        setGeneratedApiKey(keyResult.apiKey);
+      } catch (keyError: unknown) {
+        const message = keyError instanceof Error ? keyError.message : "Failed to generate API key";
+        setError(`Machine created, but API key generation failed: ${message}`);
+      }
+
       setStep(3);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Failed to create machine";
@@ -61,13 +90,11 @@ export default function AddHostPage() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
   };
-
-  const registrationToken = createdHostId
-    ? `sbx_reg_${createdHostId.replace(/-/g, "").slice(0, 24)}`
-    : "";
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -347,65 +374,142 @@ export default function AddHostPage() {
         </div>
       )}
 
-      {/* Step 3: Install Agent */}
+      {/* Step 3: Connect Your Machine */}
       {step === 3 && (
         <div className="bg-card border border-border rounded-xl p-6">
           <h2 className="text-lg font-semibold text-foreground mb-1">
-            Step 3: Install Host Agent
+            Step 3: Connect Your Machine
           </h2>
           <p className="text-sm text-muted-foreground mb-6">
-            Install our lightweight agent software on your machine
+            Install the Sparebox daemon and connect your machine
           </p>
 
+          {error && (
+            <div className="status-error rounded-lg p-4 mb-6">
+              <p className="text-sm">{error}</p>
+            </div>
+          )}
+
+          {/* Connection Status */}
+          <div className={`mb-6 rounded-lg p-4 border ${
+            daemonConnected
+              ? "bg-green-500/5 border-green-500/20"
+              : "bg-muted/50 border-border"
+          }`}>
+            <div className="flex items-center gap-3">
+              {daemonConnected ? (
+                <>
+                  <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-green-600">Daemon connected!</p>
+                    <p className="text-xs text-muted-foreground">Your machine is sending heartbeats successfully.</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Loader2 className="w-5 h-5 text-muted-foreground animate-spin shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Waiting for daemon connection...</p>
+                    <p className="text-xs text-muted-foreground">Complete the steps below, then this will update automatically.</p>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
           <div className="space-y-6">
+            {/* Step 1: Install */}
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
-                Run this command on your machine:
+                1. Run the install command on your machine:
               </label>
               <div className="flex items-center gap-2">
                 <code className="flex-1 bg-muted px-4 py-3 rounded-lg text-sm text-primary font-mono">
-                  curl -fsSL https://sparebox.dev/install | sh
+                  curl -fsSL https://www.sparebox.dev/api/install | bash
                 </code>
                 <button
                   onClick={() =>
                     copyToClipboard(
-                      "curl -fsSL https://sparebox.dev/install | sh"
+                      "curl -fsSL https://www.sparebox.dev/api/install | bash",
+                      "install"
                     )
                   }
                   className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
                 >
-                  <Copy className="w-4 h-4" />
+                  {copiedField === "install" ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
+            {/* Step 2: Enter credentials */}
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
-                After installation, enter this registration token:
+                2. When prompted, enter these credentials:
               </label>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 bg-muted px-4 py-3 rounded-lg text-sm text-primary font-mono">
-                  {registrationToken}
-                </code>
-                <button
-                  onClick={() => copyToClipboard(registrationToken)}
-                  className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
+              <div className="space-y-3">
+                {/* API Key */}
+                <div>
+                  <span className="text-xs text-muted-foreground">API Key</span>
+                  {generatedApiKey ? (
+                    <div className="flex items-center gap-2 mt-1">
+                      <code className="flex-1 bg-muted px-4 py-3 rounded-lg text-sm text-primary font-mono break-all">
+                        {generatedApiKey}
+                      </code>
+                      <button
+                        onClick={() => copyToClipboard(generatedApiKey, "apikey")}
+                        className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors shrink-0"
+                      >
+                        {copiedField === "apikey" ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-destructive mt-1">
+                      Failed to generate. Visit the machine details page to generate one.
+                    </p>
+                  )}
+                </div>
+                {/* Host ID */}
+                <div>
+                  <span className="text-xs text-muted-foreground">Host ID</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <code className="flex-1 bg-muted px-4 py-3 rounded-lg text-sm text-primary font-mono">
+                      {createdHostId}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(createdHostId || "", "hostid")}
+                      className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors shrink-0"
+                    >
+                      {copiedField === "hostid" ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="bg-muted/50 rounded-lg p-4">
-              <p className="text-sm text-foreground mb-2">
-                ℹ️ The agent will:
-              </p>
-              <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-                <li>Run in a Docker container</li>
-                <li>Use Tailscale for secure networking</li>
-                <li>Auto-update to the latest version</li>
-                <li>Report health metrics every 60 seconds</li>
-              </ul>
+            {/* Warning */}
+            {generatedApiKey && (
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+                  <p className="text-sm text-foreground">
+                    <strong>Save your API key now</strong> — it won't be shown again. If you lose it, you can regenerate from the machine details page.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Verify */}
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-2">
+                3. The daemon will start sending heartbeats
+              </label>
+              <div className="bg-muted/50 rounded-lg p-4">
+                <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                  <li>Reports health metrics every 60 seconds</li>
+                  <li>Auto-updates to the latest version</li>
+                  <li>Uses secure authenticated connections</li>
+                </ul>
+              </div>
             </div>
           </div>
 

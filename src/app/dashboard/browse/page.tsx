@@ -5,6 +5,43 @@ import Link from "next/link";
 import { useState } from "react";
 import { Server, MapPin, Cpu, HardDrive, Activity } from "lucide-react";
 
+function LastSeenBadge({ lastHeartbeat }: { lastHeartbeat: Date | string | null | undefined }) {
+  if (!lastHeartbeat) return null;
+
+  const lastBeat = new Date(lastHeartbeat);
+  const diffMs = Date.now() - lastBeat.getTime();
+  const minutesAgo = Math.floor(diffMs / 60000);
+
+  // Online: heartbeat within last 5 minutes
+  if (minutesAgo < 5) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-600">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+        Online
+      </span>
+    );
+  }
+
+  // Stale: format relative time
+  let relativeTime: string;
+  if (minutesAgo < 60) {
+    relativeTime = `${minutesAgo}m ago`;
+  } else if (minutesAgo < 1440) {
+    const hours = Math.floor(minutesAgo / 60);
+    relativeTime = `${hours}h ago`;
+  } else {
+    const days = Math.floor(minutesAgo / 1440);
+    relativeTime = `${days}d ago`;
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600">
+      <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+      Last seen {relativeTime}
+    </span>
+  );
+}
+
 export default function BrowseHostsPage() {
   const [region, setRegion] = useState<string>("");
   const [minRam, setMinRam] = useState<string>("");
@@ -110,6 +147,7 @@ export default function BrowseHostsPage() {
                       <span className="text-primary font-semibold">
                         ${((host.pricePerMonth || 0) / 100).toFixed(0)}/mo
                       </span>
+                      <LastSeenBadge lastHeartbeat={(host as any).lastHeartbeat} />
                     </div>
                     
                     {host.description && (

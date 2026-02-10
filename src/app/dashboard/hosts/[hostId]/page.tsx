@@ -17,6 +17,14 @@ import {
   Pencil,
   Trash2,
   Bot,
+  Key,
+  Copy,
+  Check,
+  AlertTriangle,
+  Globe,
+  Workflow,
+  RefreshCw,
+  X,
 } from "lucide-react";
 
 function StatusBadge({ status }: { status: string }) {
@@ -45,6 +53,54 @@ function StatusBadge({ status }: { status: string }) {
         }`}
       />
       {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+}
+
+function HeartbeatIndicator({ lastHeartbeat }: { lastHeartbeat: Date | string | null | undefined }) {
+  if (!lastHeartbeat) {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <span className="relative flex h-3 w-3">
+          <span className="h-3 w-3 rounded-full bg-gray-400" />
+        </span>
+        <span className="text-muted-foreground/70">Never connected</span>
+      </span>
+    );
+  }
+
+  const lastBeat = new Date(lastHeartbeat);
+  const minutesAgo = Math.floor((Date.now() - lastBeat.getTime()) / 60000);
+
+  if (minutesAgo < 2) {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <span className="relative flex h-3 w-3">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+          <span className="relative inline-flex h-3 w-3 rounded-full bg-green-500" />
+        </span>
+        <span className="text-green-600 font-medium">Online — {minutesAgo < 1 ? "just now" : `${minutesAgo} min ago`}</span>
+      </span>
+    );
+  }
+
+  if (minutesAgo < 5) {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <span className="relative flex h-3 w-3">
+          <span className="h-3 w-3 rounded-full bg-yellow-500" />
+        </span>
+        <span className="text-yellow-600">{minutesAgo} min ago</span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span className="relative flex h-3 w-3">
+        <span className="h-3 w-3 rounded-full bg-red-500" />
+      </span>
+      <span className="text-destructive">{minutesAgo} min ago</span>
     </span>
   );
 }
@@ -122,6 +178,185 @@ function AgentStatusBadge({ status }: { status: string }) {
   );
 }
 
+function ApiKeySection({ hostId }: { hostId: string }) {
+  const [showNewKey, setShowNewKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<"regenerate" | "revoke" | null>(null);
+
+  const { data: keyInfo, refetch: refetchKey } = trpc.hosts.getApiKeyInfo.useQuery({ hostId });
+  const generateKey = trpc.hosts.generateApiKey.useMutation({
+    onSuccess: (data) => {
+      setShowNewKey(data.apiKey);
+      refetchKey();
+    },
+  });
+  const revokeKey = trpc.hosts.revokeApiKey.useMutation({
+    onSuccess: () => {
+      setShowNewKey(null);
+      refetchKey();
+      setConfirmAction(null);
+    },
+  });
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleGenerate = () => {
+    generateKey.mutate({ hostId });
+  };
+
+  const handleRegenerate = () => {
+    setConfirmAction(null);
+    generateKey.mutate({ hostId });
+  };
+
+  const handleRevoke = () => {
+    revokeKey.mutate({ hostId });
+  };
+
+  const formatDate = (date: Date | string | null) => {
+    if (!date) return "Never";
+    return new Date(date).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-6">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+          <Key className="w-4 h-4 text-primary" />
+        </div>
+        <h3 className="font-semibold text-foreground">API Key</h3>
+      </div>
+
+      {/* New key modal/alert */}
+      {showNewKey && (
+        <div className="mb-4 bg-primary/5 border border-primary/20 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground mb-1">
+                Save this key — it won't be shown again.
+              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <code className="flex-1 bg-muted px-3 py-2 rounded-lg text-sm text-primary font-mono break-all">
+                  {showNewKey}
+                </code>
+                <button
+                  onClick={() => handleCopy(showNewKey)}
+                  className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors shrink-0"
+                >
+                  {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+              <button
+                onClick={() => setShowNewKey(null)}
+                className="text-xs text-muted-foreground hover:text-foreground mt-2"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation dialogs */}
+      {confirmAction && (
+        <div className="mb-4 bg-destructive/5 border border-destructive/20 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-foreground mb-1">
+                {confirmAction === "regenerate"
+                  ? "Regenerate API key?"
+                  : "Revoke API key?"}
+              </p>
+              <p className="text-xs text-muted-foreground mb-3">
+                {confirmAction === "regenerate"
+                  ? "The current key will stop working immediately. Your daemon will need the new key to reconnect."
+                  : "This key will stop working immediately. Your daemon will disconnect."}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={confirmAction === "regenerate" ? handleRegenerate : handleRevoke}
+                  disabled={generateKey.isPending || revokeKey.isPending}
+                  className="px-3 py-1.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground text-sm font-medium rounded-lg transition-colors"
+                >
+                  {(generateKey.isPending || revokeKey.isPending) ? "Processing..." : "Confirm"}
+                </button>
+                <button
+                  onClick={() => setConfirmAction(null)}
+                  className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {keyInfo ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <code className="bg-muted px-3 py-2 rounded-lg text-sm font-mono text-foreground">
+              {keyInfo.keyPrefix}...{keyInfo.keySuffix}
+            </code>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span>Created: {formatDate(keyInfo.createdAt)}</span>
+            <span>Last used: {formatDate(keyInfo.lastUsedAt)}</span>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={() => setConfirmAction("regenerate")}
+              disabled={generateKey.isPending}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-muted hover:bg-accent text-foreground rounded-lg transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Regenerate
+            </button>
+            <button
+              onClick={() => setConfirmAction("revoke")}
+              disabled={revokeKey.isPending}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+              Revoke
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-4">
+          <p className="text-sm text-muted-foreground mb-3">No API key generated</p>
+          <button
+            onClick={handleGenerate}
+            disabled={generateKey.isPending}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg transition-colors"
+          >
+            {generateKey.isPending ? (
+              <>Generating...</>
+            ) : (
+              <>
+                <Key className="w-4 h-4" />
+                Generate API Key
+              </>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function HostDetailsPage() {
   const router = useRouter();
   const params = useParams();
@@ -178,16 +413,6 @@ export default function HostDetailsPage() {
   const formatCurrency = (cents: number) => `$${(cents / 100).toFixed(2)}`;
   const formatDate = (date: Date | string) => new Date(date).toLocaleDateString();
 
-  const getHeartbeatStatus = () => {
-    if (!host?.lastHeartbeat) return { status: "Never connected", color: "text-muted-foreground/70" };
-    const lastBeat = new Date(host.lastHeartbeat);
-    const minutesAgo = Math.floor((Date.now() - lastBeat.getTime()) / 60000);
-    
-    if (minutesAgo < 2) return { status: `${minutesAgo} min ago`, color: "text-green-600" };
-    if (minutesAgo < 5) return { status: `${minutesAgo} min ago`, color: "text-yellow-600" };
-    return { status: `${minutesAgo} min ago`, color: "text-destructive" };
-  };
-
   if (isLoading) {
     return (
       <div className="animate-pulse space-y-6">
@@ -216,8 +441,6 @@ export default function HostDetailsPage() {
     );
   }
 
-  const heartbeat = getHeartbeatStatus();
-
   return (
     <div>
       <Link
@@ -244,9 +467,9 @@ export default function HostDetailsPage() {
             )}
             <StatusBadge status={host.status} />
           </div>
-          <p className={`mt-1 ${heartbeat.color}`}>
-            Last heartbeat: {heartbeat.status}
-          </p>
+          <div className="mt-2">
+            <HeartbeatIndicator lastHeartbeat={host.lastHeartbeat} />
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -329,6 +552,31 @@ export default function HostDetailsPage() {
                 <p className="text-foreground">{host.osInfo || "Not specified"}</p>
               </div>
             </div>
+            {(host as any).daemonVersion && (
+              <div className="flex items-start gap-3">
+                <Workflow className="w-4 h-4 text-muted-foreground mt-0.5" />
+                <div>
+                  <span className="text-muted-foreground">Daemon</span>
+                  <p className="text-foreground">
+                    v{(host as any).daemonVersion}
+                    {(host as any).nodeVersion && (
+                      <span className="text-muted-foreground ml-2">
+                        (Node {(host as any).nodeVersion})
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
+            {(host as any).publicIp && (
+              <div className="flex items-start gap-3">
+                <Globe className="w-4 h-4 text-muted-foreground mt-0.5" />
+                <div>
+                  <span className="text-muted-foreground">Public IP</span>
+                  <p className="text-foreground">{(host as any).publicIp}</p>
+                </div>
+              </div>
+            )}
             <div className="flex items-start gap-3">
               <MapPin className="w-4 h-4 text-muted-foreground mt-0.5" />
               <div>
@@ -432,6 +680,11 @@ export default function HostDetailsPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* API Key Management */}
+      <div className="mb-8">
+        <ApiKeySection hostId={hostId} />
       </div>
 
       {/* Hosted Agents */}
