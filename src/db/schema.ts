@@ -124,7 +124,12 @@ export const hosts = pgTable("hosts", {
 
   // Networking
   tailscaleIp: text("tailscale_ip"),
+  publicIp: text("public_ip"),
   lastHeartbeat: timestamp("last_heartbeat"),
+
+  // Daemon info
+  daemonVersion: text("daemon_version"),
+  nodeVersion: text("node_version"),
 
   // Stats
   uptimePercent: real("uptime_percent").default(100),
@@ -203,6 +208,22 @@ export const hostHeartbeats = pgTable("host_heartbeats", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Host API Keys (for daemon authentication)
+export const hostApiKeys = pgTable("host_api_keys", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  hostId: uuid("host_id")
+    .notNull()
+    .references(() => hosts.id, { onDelete: "cascade" }),
+  keyHash: text("key_hash").notNull(),
+  keyPrefix: text("key_prefix").notNull(), // First 8 chars for identification
+  keySuffix: text("key_suffix").notNull(), // Last 4 chars for display
+  name: text("name").default("default"),
+  lastUsedAt: timestamp("last_used_at"),
+  expiresAt: timestamp("expires_at"),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // User Preferences (notification settings)
 export const userPreferences = pgTable("user_preferences", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -258,6 +279,7 @@ export const hostsRelations = relations(hosts, ({ one, many }) => ({
   agents: many(agents),
   subscriptions: many(subscriptions),
   payouts: many(payouts),
+  apiKeys: many(hostApiKeys),
 }));
 
 export const agentsRelations = relations(agents, ({ one, many }) => ({
@@ -278,6 +300,10 @@ export const payoutsRelations = relations(payouts, ({ one }) => ({
 
 export const hostHeartbeatsRelations = relations(hostHeartbeats, ({ one }) => ({
   host: one(hosts, { fields: [hostHeartbeats.hostId], references: [hosts.id] }),
+}));
+
+export const hostApiKeysRelations = relations(hostApiKeys, ({ one }) => ({
+  host: one(hosts, { fields: [hostApiKeys.hostId], references: [hosts.id] }),
 }));
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({

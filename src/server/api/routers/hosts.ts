@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { randomBytes, createHash } from "crypto";
 import { router, protectedProcedure, hostProcedure } from "../trpc";
-import { hosts, hostHeartbeats, agents, subscriptions } from "@/db";
-import { eq, desc, and, gte, sql, not } from "drizzle-orm";
+import { hosts, hostHeartbeats, hostApiKeys, agents, subscriptions } from "@/db";
+import { eq, desc, and, gte, sql, not, isNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { API_KEY_PREFIX, API_KEY_ENTROPY_BYTES } from "@/lib/constants";
 
 export const hostsRouter = router({
   // List hosts for the current user
@@ -262,5 +264,123 @@ export const hostsRouter = router({
           timestamp: h.createdAt,
         })),
       };
+    }),
+
+  // =========================================================================
+  // API Key Management
+  // =========================================================================
+
+  // Generate API key for a host
+  generateApiKey: hostProcedure
+    .input(z.object({ hostId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify ownership
+      const host = await ctx.db.query.hosts.findFirst({
+        where: eq(hosts.id, input.hostId),
+      });
+
+      if (!host || host.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Host not found" });
+      }
+
+      // Generate random API key
+      const rawKey = `${API_KEY_PREFIX}${randomBytes(API_KEY_ENTROPY_BYTES).toString("hex")}`;
+      const keyHash = createHash("sha256").update(rawKey).digest("hex");
+      const keyPrefix = rawKey.slice(0, 12); // "sbx_host_xxx"
+      const keySuffix = rawKey.slice(-4);
+
+      // Revoke any existing active keys for this host
+      await ctx.db
+        .update(hostApiKeys)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(
+            eq(hostApiKeys.hostId, input.hostId),
+            isNull(hostApiKeys.revokedAt)
+          )
+        );
+
+      // Store new key hash
+      await ctx.db.insert(hostApiKeys).values({
+        hostId: input.hostId,
+        keyHash,
+        keyPrefix,
+        keySuffix,
+        name: "default",
+      });
+
+      // Return the raw key — shown once only
+      return {
+        apiKey: rawKey,
+        prefix: keyPrefix,
+        suffix: keySuffix,
+        message: "Save this key — it won't be shown again.",
+      };
+    }),
+
+  // Revoke API key for a host
+  revokeApiKey: hostProcedure
+    .input(z.object({ hostId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify ownership
+      const host = await ctx.db.query.hosts.findFirst({
+        where: eq(hosts.id, input.hostId),
+      });
+
+      if (!host || host.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Host not found" });
+      }
+
+      const result = await ctx.db
+        .update(hostApiKeys)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(
+            eq(hostApiKeys.hostId, input.hostId),
+            isNull(hostApiKeys.revokedAt)
+          )
+        )
+        .returning({ id: hostApiKeys.id });
+
+      if (result.length === 0) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "No active API key found for this host",
+        });
+      }
+
+      return { success: true };
+    }),
+
+  // Get API key info (metadata only — never the raw key)
+  getApiKeyInfo: hostProcedure
+    .input(z.object({ hostId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      // Verify ownership
+      const host = await ctx.db.query.hosts.findFirst({
+        where: eq(hosts.id, input.hostId),
+      });
+
+      if (!host || host.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Host not found" });
+      }
+
+      const activeKey = await ctx.db.query.hostApiKeys.findFirst({
+        where: and(
+          eq(hostApiKeys.hostId, input.hostId),
+          isNull(hostApiKeys.revokedAt)
+        ),
+        columns: {
+          id: true,
+          keyPrefix: true,
+          keySuffix: true,
+          name: true,
+          lastUsedAt: true,
+          expiresAt: true,
+          createdAt: true,
+        },
+      });
+
+      return activeKey || null;
     }),
 });

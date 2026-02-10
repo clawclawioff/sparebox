@@ -1,0 +1,17 @@
+{
+  "name": "sparebox-daemon",
+  "version": "0.1.0",
+  "description": "Sparebox Host Daemon — lightweight heartbeat agent for host machines",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "verify": "node dist/index.js --verify"
+  },
+  "author": "Sparebox",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
