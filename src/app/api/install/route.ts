@@ -68,26 +68,7 @@ rm -f daemon.tar.gz
 
 echo -e "\${GREEN}✓\${NC} Daemon downloaded"
 
-# Get configuration
-echo ""
-echo -e "\${YELLOW}Configuration\${NC}"
-echo "You need your API Key and Host ID from the Sparebox dashboard."
-echo "Go to: https://www.sparebox.dev/dashboard/hosts"
-echo ""
-
-# Check if config already exists
-if [ -f "\$SPAREBOX_DIR/config.json" ]; then
-    echo -e "\${YELLOW}Existing config found at \$SPAREBOX_DIR/config.json\${NC}"
-    read -p "Overwrite? (y/N): " OVERWRITE
-    if [ "\$OVERWRITE" != "y" ] && [ "\$OVERWRITE" != "Y" ]; then
-        echo "Keeping existing config."
-    else
-        configure_daemon
-    fi
-else
-    configure_daemon
-fi
-
+# Function to configure daemon (must be defined before use)
 configure_daemon() {
     read -p "API Key (sbx_host_...): " API_KEY
     read -p "Host ID (UUID): " HOST_ID
@@ -109,6 +90,26 @@ EOFCONF
         echo -e "\${GREEN}✓\${NC} Config saved to \$SPAREBOX_DIR/config.json"
     fi
 }
+
+# Get configuration
+echo ""
+echo -e "\${YELLOW}Configuration\${NC}"
+echo "You need your API Key and Host ID from the Sparebox dashboard."
+echo "Go to: https://www.sparebox.dev/dashboard/hosts"
+echo ""
+
+# Check if config already exists
+if [ -f "\$SPAREBOX_DIR/config.json" ]; then
+    echo -e "\${YELLOW}Existing config found at \$SPAREBOX_DIR/config.json\${NC}"
+    read -p "Overwrite? (y/N): " OVERWRITE
+    if [ "\$OVERWRITE" != "y" ] && [ "\$OVERWRITE" != "Y" ]; then
+        echo "Keeping existing config."
+    else
+        configure_daemon
+    fi
+else
+    configure_daemon
+fi
 
 # Verify installation
 echo ""
