@@ -23,12 +23,12 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// dist/index.js
-var fs2 = __toESM(require("node:fs"), 1);
-var path2 = __toESM(require("node:path"), 1);
-var import_node_url2 = require("node:url");
+// src/index.ts
+var fs3 = __toESM(require("node:fs"), 1);
+var path3 = __toESM(require("node:path"), 1);
+var import_node_url3 = require("node:url");
 
-// dist/config.js
+// src/config.ts
 var fs = __toESM(require("node:fs"), 1);
 var path = __toESM(require("node:path"), 1);
 var os = __toESM(require("node:os"), 1);
@@ -76,7 +76,7 @@ function validateConfig(config) {
   return errors;
 }
 
-// dist/metrics.js
+// src/metrics.ts
 var os2 = __toESM(require("node:os"), 1);
 var import_node_child_process = require("node:child_process");
 function snapshotCpu() {
@@ -99,16 +99,14 @@ async function getCpuUsage() {
   const b = snapshotCpu();
   const idleDelta = b.idle - a.idle;
   const totalDelta = b.total - a.total;
-  if (totalDelta === 0)
-    return 0;
+  if (totalDelta === 0) return 0;
   const usage = (totalDelta - idleDelta) / totalDelta * 100;
   return Math.round(Math.max(0, Math.min(100, usage)));
 }
 function getRamUsage() {
   const total = os2.totalmem();
   const free = os2.freemem();
-  if (total === 0)
-    return 0;
+  if (total === 0) return 0;
   return Math.round((total - free) / total * 100);
 }
 function execPromise(cmd) {
@@ -135,25 +133,23 @@ async function getDiskUsage() {
 async function getDiskUsageUnix() {
   const output = await execPromise("df -P /");
   const lines = output.trim().split("\n");
-  if (lines.length < 2)
-    return -1;
+  if (lines.length < 2) return -1;
   const parts = lines[1].trim().split(/\s+/);
   const capacityStr = parts[4];
-  if (!capacityStr)
-    return -1;
+  if (!capacityStr) return -1;
   const pct = parseInt(capacityStr.replace("%", ""), 10);
   return isNaN(pct) ? -1 : pct;
 }
 async function getDiskUsageWindows() {
-  const output = await execPromise(`wmic logicaldisk where "DeviceID='C:'" get Size,FreeSpace /format:csv`);
+  const output = await execPromise(
+    `wmic logicaldisk where "DeviceID='C:'" get Size,FreeSpace /format:csv`
+  );
   const lines = output.trim().split("\n").filter((l) => l.trim().length > 0);
-  if (lines.length < 2)
-    return -1;
+  if (lines.length < 2) return -1;
   const parts = lines[lines.length - 1].trim().split(",");
   const freeSpace = parseInt(parts[1] ?? "", 10);
   const totalSize = parseInt(parts[2] ?? "", 10);
-  if (isNaN(freeSpace) || isNaN(totalSize) || totalSize === 0)
-    return -1;
+  if (isNaN(freeSpace) || isNaN(totalSize) || totalSize === 0) return -1;
   return Math.round((totalSize - freeSpace) / totalSize * 100);
 }
 async function getTotalDiskGb() {
@@ -169,23 +165,21 @@ async function getTotalDiskGb() {
 async function getTotalDiskGbUnix() {
   const output = await execPromise("df -k /");
   const lines = output.trim().split("\n");
-  if (lines.length < 2)
-    return -1;
+  if (lines.length < 2) return -1;
   const parts = lines[1].trim().split(/\s+/);
   const totalKb = parseInt(parts[1] ?? "", 10);
-  if (isNaN(totalKb) || totalKb === 0)
-    return -1;
+  if (isNaN(totalKb) || totalKb === 0) return -1;
   return Math.round(totalKb / (1024 * 1024));
 }
 async function getTotalDiskGbWindows() {
-  const output = await execPromise(`wmic logicaldisk where "DeviceID='C:'" get Size /format:csv`);
+  const output = await execPromise(
+    `wmic logicaldisk where "DeviceID='C:'" get Size /format:csv`
+  );
   const lines = output.trim().split("\n").filter((l) => l.trim().length > 0);
-  if (lines.length < 2)
-    return -1;
+  if (lines.length < 2) return -1;
   const parts = lines[lines.length - 1].trim().split(",");
   const totalBytes = parseInt(parts[parts.length - 1] ?? "", 10);
-  if (isNaN(totalBytes) || totalBytes === 0)
-    return -1;
+  if (isNaN(totalBytes) || totalBytes === 0) return -1;
   return Math.round(totalBytes / 1024 ** 3);
 }
 function getTotalRamGb() {
@@ -202,12 +196,12 @@ function getOsInfo() {
   return `${os2.type()} ${os2.release()}`;
 }
 
-// dist/heartbeat.js
-var https = __toESM(require("node:https"), 1);
-var http = __toESM(require("node:http"), 1);
-var import_node_url = require("node:url");
+// src/heartbeat.ts
+var https2 = __toESM(require("node:https"), 1);
+var http2 = __toESM(require("node:http"), 1);
+var import_node_url2 = require("node:url");
 
-// dist/log.js
+// src/log.ts
 function pad(n) {
   return n.toString().padStart(2, "0");
 }
@@ -226,7 +220,750 @@ function log(level, message) {
   }
 }
 
-// dist/heartbeat.js
+// src/agent-manager.ts
+var fs2 = __toESM(require("node:fs"), 1);
+var path2 = __toESM(require("node:path"), 1);
+var os3 = __toESM(require("node:os"), 1);
+var https = __toESM(require("node:https"), 1);
+var http = __toESM(require("node:http"), 1);
+var import_node_url = require("node:url");
+
+// src/docker.ts
+var import_node_child_process2 = require("node:child_process");
+function run(cmd, args2, timeoutMs = 6e4) {
+  return new Promise((resolve, reject) => {
+    (0, import_node_child_process2.execFile)(cmd, args2, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) {
+        reject(
+          new Error(
+            `${cmd} ${args2.join(" ")} failed: ${err.message}${stderr ? " \u2014 " + stderr.trim() : ""}`
+          )
+        );
+      } else {
+        resolve({ stdout: stdout ?? "", stderr: stderr ?? "" });
+      }
+    });
+  });
+}
+var cachedRuntime = null;
+async function detectRuntime() {
+  if (cachedRuntime !== null) return cachedRuntime;
+  for (const rt2 of ["docker", "podman"]) {
+    try {
+      await run(rt2, ["info", "--format", "{{.ServerVersion}}"], 1e4);
+      cachedRuntime = rt2;
+      log("INFO", `Container runtime detected: ${rt2}`);
+      return rt2;
+    } catch {
+    }
+  }
+  log("WARN", "No container runtime (docker/podman) detected");
+  return null;
+}
+async function rt() {
+  const name = await detectRuntime();
+  if (!name) throw new Error("No container runtime available");
+  return name;
+}
+async function pullImage(image) {
+  const runtime = await rt();
+  log("INFO", `Pulling image ${image}...`);
+  try {
+    await run(runtime, ["pull", image], 3e5);
+    log("INFO", `Image pulled: ${image}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log("WARN", `Failed to pull image (may use cached): ${msg}`);
+  }
+}
+async function createContainer(opts) {
+  const runtime = await rt();
+  const args2 = [
+    "run",
+    "-d",
+    "--name",
+    opts.name,
+    // Resource limits
+    "--memory",
+    `${opts.ramMb}m`,
+    "--cpus",
+    `${opts.cpuCores}`,
+    // Security hardening
+    "--read-only",
+    "--cap-drop=ALL",
+    "--security-opt=no-new-privileges",
+    // Networking
+    "--network",
+    opts.network ?? "bridge",
+    "-p",
+    `${opts.port}:3000`,
+    // Volume mounts — workspace and state
+    "-v",
+    `${opts.workspaceDir}:/workspace`,
+    "-v",
+    `${opts.stateDir}:/state`,
+    // Tmpfs for /tmp so read-only rootfs still works
+    "--tmpfs",
+    "/tmp:rw,noexec,nosuid,size=256m"
+  ];
+  for (const [key, value] of Object.entries(opts.env)) {
+    args2.push("-e", `${key}=${value}`);
+  }
+  args2.push(opts.image);
+  const { stdout } = await run(runtime, args2, 12e4);
+  const containerId = stdout.trim().slice(0, 12);
+  log("INFO", `Container created: ${opts.name} (${containerId})`);
+  return containerId;
+}
+async function startContainer(id) {
+  const runtime = await rt();
+  await run(runtime, ["start", id], 3e4);
+  log("INFO", `Container started: ${id}`);
+}
+async function stopContainer(id) {
+  const runtime = await rt();
+  try {
+    await run(runtime, ["stop", "-t", "10", id], 3e4);
+    log("INFO", `Container stopped: ${id}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log("WARN", `Failed to stop container ${id}: ${msg}`);
+  }
+}
+async function removeContainer(id) {
+  const runtime = await rt();
+  try {
+    await run(runtime, ["rm", "-f", id], 3e4);
+    log("INFO", `Container removed: ${id}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log("WARN", `Failed to remove container ${id}: ${msg}`);
+  }
+}
+async function getContainerStats(id) {
+  const runtime = await rt();
+  try {
+    const { stdout } = await run(
+      runtime,
+      ["stats", "--no-stream", "--format", "{{.CPUPerc}}|{{.MemUsage}}", id],
+      15e3
+    );
+    const line = stdout.trim();
+    const [cpuStr, memStr] = line.split("|");
+    const cpuPercent = parseFloat((cpuStr ?? "0").replace("%", "")) || 0;
+    let ramUsageMb = 0;
+    let ramLimitMb = 0;
+    if (memStr) {
+      const memParts = memStr.split("/").map((s) => s.trim());
+      ramUsageMb = parseMemValue(memParts[0] ?? "0");
+      ramLimitMb = parseMemValue(memParts[1] ?? "0");
+    }
+    return { cpuPercent, ramUsageMb, ramLimitMb };
+  } catch {
+    return { cpuPercent: 0, ramUsageMb: 0, ramLimitMb: 0 };
+  }
+}
+function parseMemValue(s) {
+  const num = parseFloat(s);
+  if (isNaN(num)) return 0;
+  const upper = s.toUpperCase();
+  if (upper.includes("GIB") || upper.includes("GB")) return Math.round(num * 1024);
+  if (upper.includes("MIB") || upper.includes("MB")) return Math.round(num);
+  if (upper.includes("KIB") || upper.includes("KB")) return Math.round(num / 1024);
+  return Math.round(num);
+}
+async function isContainerRunning(id) {
+  const runtime = await rt();
+  try {
+    const { stdout } = await run(
+      runtime,
+      ["inspect", "--format", "{{.State.Running}}", id],
+      1e4
+    );
+    return stdout.trim() === "true";
+  } catch {
+    return false;
+  }
+}
+
+// src/profile-fallback.ts
+var import_node_child_process3 = require("node:child_process");
+function run2(cmd, args2, timeoutMs = 3e4) {
+  return new Promise((resolve, reject) => {
+    (0, import_node_child_process3.execFile)(cmd, args2, { timeout: timeoutMs, maxBuffer: 2 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) {
+        reject(new Error(`${cmd} ${args2.join(" ")} failed: ${err.message}`));
+      } else {
+        resolve({ stdout: stdout ?? "", stderr: stderr ?? "" });
+      }
+    });
+  });
+}
+var openclawBin = null;
+async function findOpenclawBinary() {
+  if (openclawBin) return openclawBin;
+  for (const bin of ["openclaw", "npx openclaw"]) {
+    try {
+      await run2(bin.split(" ")[0], bin.split(" ").length > 1 ? [bin.split(" ")[1], "--version"] : ["--version"], 1e4);
+      openclawBin = bin;
+      return bin;
+    } catch {
+    }
+  }
+  const { homedir: homedir3 } = await import("node:os");
+  const paths = [
+    `${homedir3()}/.local/bin/openclaw`,
+    "/usr/local/bin/openclaw",
+    "/usr/bin/openclaw"
+  ];
+  for (const p of paths) {
+    try {
+      await run2(p, ["--version"], 1e4);
+      openclawBin = p;
+      return p;
+    } catch {
+    }
+  }
+  return null;
+}
+async function startProfile(profileName, port, env) {
+  const bin = await findOpenclawBinary();
+  if (!bin) {
+    log("ERROR", "openclaw binary not found \u2014 cannot start profile agent");
+    return null;
+  }
+  try {
+    const args2 = ["--profile", profileName, "gateway", "start", "--port", String(port)];
+    const spawnEnv = { ...process.env, ...env };
+    const { spawn } = await import("node:child_process");
+    const child = spawn(bin, args2, {
+      detached: true,
+      stdio: "ignore",
+      env: spawnEnv
+    });
+    child.unref();
+    const pid = child.pid ?? null;
+    if (pid) {
+      log("INFO", `Profile agent started: ${profileName} (PID: ${pid}, port: ${port})`);
+    } else {
+      log("WARN", `Profile agent started but no PID captured: ${profileName}`);
+    }
+    return pid;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log("ERROR", `Failed to start profile agent ${profileName}: ${msg}`);
+    return null;
+  }
+}
+async function stopProfile(profileName) {
+  const bin = await findOpenclawBinary();
+  if (!bin) {
+    log("ERROR", "openclaw binary not found \u2014 cannot stop profile agent");
+    return;
+  }
+  try {
+    await run2(bin, ["--profile", profileName, "gateway", "stop"], 15e3);
+    log("INFO", `Profile agent stopped: ${profileName}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log("WARN", `Failed to stop profile agent ${profileName}: ${msg}`);
+  }
+}
+async function isProfileRunning(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function getProfileStatus(profileName, pid) {
+  const bin = await findOpenclawBinary();
+  if (!bin) return "unknown";
+  try {
+    const { stdout } = await run2(bin, ["--profile", profileName, "gateway", "status"], 1e4);
+    if (stdout.toLowerCase().includes("running")) return "running";
+    if (stdout.toLowerCase().includes("stopped")) return "stopped";
+  } catch {
+  }
+  if (pid) {
+    return await isProfileRunning(pid) ? "running" : "stopped";
+  }
+  return "unknown";
+}
+async function killProfile(pid) {
+  if (!pid) return;
+  try {
+    process.kill(pid, "SIGTERM");
+    await new Promise((resolve) => setTimeout(resolve, 3e3));
+    try {
+      process.kill(pid, 0);
+      process.kill(pid, "SIGKILL");
+    } catch {
+    }
+  } catch {
+  }
+}
+
+// src/agent-manager.ts
+var SPAREBOX_DIR = path2.join(os3.homedir(), ".sparebox");
+var AGENTS_FILE = path2.join(SPAREBOX_DIR, "agents.json");
+var AGENTS_DIR = path2.join(SPAREBOX_DIR, "agents");
+var DEFAULT_IMAGE = "ghcr.io/openclaw/openclaw:latest";
+var BASE_PORT = 19001;
+var agents = /* @__PURE__ */ new Map();
+var isolationMode = "none";
+var daemonConfig = null;
+var pendingAcks = [];
+async function initAgentManager(config) {
+  daemonConfig = config;
+  ensureDir(SPAREBOX_DIR);
+  ensureDir(AGENTS_DIR);
+  loadAgents();
+  const runtime = await detectRuntime();
+  if (runtime) {
+    isolationMode = "docker";
+    log("INFO", `Agent isolation: docker (${runtime})`);
+  } else {
+    const bin = await findOpenclawBinary();
+    if (bin) {
+      isolationMode = "profile";
+      log("INFO", `Agent isolation: profile (openclaw at ${bin})`);
+    } else {
+      isolationMode = "none";
+      log("WARN", "Agent isolation: none \u2014 no docker/podman or openclaw binary found");
+    }
+  }
+  await reconcileAgents();
+  return isolationMode;
+}
+function getIsolationMode() {
+  return isolationMode;
+}
+function getAgentCount() {
+  return agents.size;
+}
+async function processCommands(commands) {
+  const acks = [];
+  for (const cmd of commands) {
+    try {
+      log("INFO", `Processing command: ${cmd.type} for agent ${cmd.agentId} (cmd: ${cmd.id})`);
+      const ack = await processCommand(cmd);
+      acks.push(ack);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log("ERROR", `Command ${cmd.id} (${cmd.type}) failed: ${msg}`);
+      acks.push({ id: cmd.id, status: "error", error: msg });
+    }
+  }
+  return acks;
+}
+async function processCommand(cmd) {
+  switch (cmd.type) {
+    case "deploy":
+      return handleDeploy(cmd);
+    case "start":
+      return handleStart(cmd);
+    case "stop":
+      return handleStop(cmd);
+    case "restart":
+      return handleRestart(cmd);
+    case "undeploy":
+      return handleUndeploy(cmd);
+    case "update_config":
+      return handleUpdateConfig(cmd);
+    default:
+      return { id: cmd.id, status: "error", error: `Unknown command type: ${cmd.type}` };
+  }
+}
+async function handleDeploy(cmd) {
+  const { agentId, payload, id } = cmd;
+  const profile = payload.profile ?? `sparebox-agent-${agentId.slice(0, 8)}`;
+  const image = payload.image ?? DEFAULT_IMAGE;
+  const resources = {
+    ramMb: payload.resources?.ramMb ?? 2048,
+    cpuCores: payload.resources?.cpuCores ?? 1,
+    diskGb: payload.resources?.diskGb ?? 10
+  };
+  if (agents.has(agentId)) {
+    const existing = agents.get(agentId);
+    log("WARN", `Agent ${agentId} already deployed as ${existing.containerId ?? existing.pid}`);
+    return { id, status: "acked", containerId: existing.containerId ?? `pid:${existing.pid}` };
+  }
+  const port = allocatePort();
+  const workspaceDir = path2.join(AGENTS_DIR, agentId, "workspace");
+  const stateDir = path2.join(AGENTS_DIR, agentId, "state");
+  ensureDir(workspaceDir);
+  ensureDir(stateDir);
+  let agentEnv = { ...payload.env ?? {} };
+  if (payload.configUrl && daemonConfig) {
+    try {
+      const configData = await fetchConfig(payload.configUrl, daemonConfig);
+      if (configData.env) {
+        agentEnv = { ...agentEnv, ...configData.env };
+      }
+      fs2.writeFileSync(
+        path2.join(stateDir, "deploy-config.json"),
+        JSON.stringify(configData, null, 2),
+        "utf-8"
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log("WARN", `Failed to fetch deploy config for ${agentId}: ${msg}`);
+    }
+  }
+  let containerId = null;
+  let pid = null;
+  if (isolationMode === "docker") {
+    await pullImage(image);
+    containerId = await createContainer({
+      name: profile,
+      image,
+      ramMb: resources.ramMb,
+      cpuCores: resources.cpuCores,
+      port,
+      workspaceDir,
+      stateDir,
+      env: agentEnv
+    });
+    let healthy = false;
+    for (let i = 0; i < 10; i++) {
+      await sleep2(1e3);
+      if (await isContainerRunning(containerId)) {
+        healthy = true;
+        break;
+      }
+    }
+    if (!healthy) {
+      log("WARN", `Container ${containerId} did not become healthy in 10s`);
+    }
+  } else if (isolationMode === "profile") {
+    pid = await startProfile(profile, port, agentEnv);
+  } else {
+    return { id, status: "error", error: "No isolation runtime available" };
+  }
+  const record = {
+    agentId,
+    profile,
+    containerId,
+    pid,
+    port,
+    status: "running",
+    isolation: isolationMode,
+    image,
+    deployedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    resources
+  };
+  agents.set(agentId, record);
+  saveAgents();
+  log("INFO", `Agent ${agentId} deployed: ${containerId ?? `pid:${pid}`} on port ${port}`);
+  return { id, status: "acked", containerId: containerId ?? `pid:${pid}` };
+}
+async function handleStart(cmd) {
+  const agent = agents.get(cmd.agentId);
+  if (!agent) {
+    return { id: cmd.id, status: "error", error: `Agent ${cmd.agentId} not found` };
+  }
+  try {
+    if (agent.isolation === "docker" && agent.containerId) {
+      await startContainer(agent.containerId);
+    } else if (agent.isolation === "profile") {
+      const pid = await startProfile(agent.profile, agent.port, {});
+      agent.pid = pid;
+    }
+    agent.status = "running";
+    saveAgents();
+    return { id: cmd.id, status: "acked", containerId: agent.containerId ?? `pid:${agent.pid}` };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    agent.status = "error";
+    saveAgents();
+    return { id: cmd.id, status: "error", error: msg };
+  }
+}
+async function handleStop(cmd) {
+  const agent = agents.get(cmd.agentId);
+  if (!agent) {
+    return { id: cmd.id, status: "error", error: `Agent ${cmd.agentId} not found` };
+  }
+  try {
+    if (agent.isolation === "docker" && agent.containerId) {
+      await stopContainer(agent.containerId);
+    } else if (agent.isolation === "profile") {
+      await stopProfile(agent.profile);
+    }
+    agent.status = "stopped";
+    saveAgents();
+    return { id: cmd.id, status: "acked", containerId: agent.containerId ?? `pid:${agent.pid}` };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { id: cmd.id, status: "error", error: msg };
+  }
+}
+async function handleRestart(cmd) {
+  const agent = agents.get(cmd.agentId);
+  if (!agent) {
+    return { id: cmd.id, status: "error", error: `Agent ${cmd.agentId} not found` };
+  }
+  try {
+    if (agent.isolation === "docker" && agent.containerId) {
+      await stopContainer(agent.containerId);
+      await startContainer(agent.containerId);
+    } else if (agent.isolation === "profile") {
+      await stopProfile(agent.profile);
+      await sleep2(1e3);
+      const pid = await startProfile(agent.profile, agent.port, {});
+      agent.pid = pid;
+    }
+    agent.status = "running";
+    saveAgents();
+    return { id: cmd.id, status: "acked", containerId: agent.containerId ?? `pid:${agent.pid}` };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    agent.status = "error";
+    saveAgents();
+    return { id: cmd.id, status: "error", error: msg };
+  }
+}
+async function handleUndeploy(cmd) {
+  const agent = agents.get(cmd.agentId);
+  if (!agent) {
+    return { id: cmd.id, status: "acked" };
+  }
+  try {
+    if (agent.isolation === "docker" && agent.containerId) {
+      await removeContainer(agent.containerId);
+    } else if (agent.isolation === "profile") {
+      await stopProfile(agent.profile);
+      if (agent.pid) {
+        await killProfile(agent.pid);
+      }
+    }
+    const agentDir = path2.join(AGENTS_DIR, cmd.agentId);
+    try {
+      fs2.rmSync(agentDir, { recursive: true, force: true });
+    } catch {
+      log("WARN", `Failed to clean up agent dir: ${agentDir}`);
+    }
+    agents.delete(cmd.agentId);
+    saveAgents();
+    log("INFO", `Agent ${cmd.agentId} undeployed`);
+    return { id: cmd.id, status: "acked" };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { id: cmd.id, status: "error", error: msg };
+  }
+}
+async function handleUpdateConfig(cmd) {
+  const agent = agents.get(cmd.agentId);
+  if (!agent) {
+    return { id: cmd.id, status: "error", error: `Agent ${cmd.agentId} not found` };
+  }
+  try {
+    if (cmd.payload.configUrl && daemonConfig) {
+      const configData = await fetchConfig(cmd.payload.configUrl, daemonConfig);
+      const stateDir = path2.join(AGENTS_DIR, cmd.agentId, "state");
+      ensureDir(stateDir);
+      fs2.writeFileSync(
+        path2.join(stateDir, "deploy-config.json"),
+        JSON.stringify(configData, null, 2),
+        "utf-8"
+      );
+    }
+    if (agent.isolation === "docker" && agent.containerId) {
+      await stopContainer(agent.containerId);
+      await startContainer(agent.containerId);
+    } else if (agent.isolation === "profile") {
+      await stopProfile(agent.profile);
+      await sleep2(1e3);
+      const pid = await startProfile(agent.profile, agent.port, {});
+      agent.pid = pid;
+    }
+    agent.status = "running";
+    saveAgents();
+    log("INFO", `Agent ${cmd.agentId} config updated and restarted`);
+    return { id: cmd.id, status: "acked", containerId: agent.containerId ?? `pid:${agent.pid}` };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    agent.status = "error";
+    saveAgents();
+    return { id: cmd.id, status: "error", error: msg };
+  }
+}
+async function getAgentStatuses() {
+  const statuses = [];
+  for (const [agentId, agent] of agents) {
+    let stats = { cpuPercent: 0, ramUsageMb: 0, ramLimitMb: 0 };
+    let status = agent.status;
+    try {
+      if (agent.isolation === "docker" && agent.containerId) {
+        const running2 = await isContainerRunning(agent.containerId);
+        status = running2 ? "running" : "stopped";
+        if (running2) {
+          stats = await getContainerStats(agent.containerId);
+        }
+      } else if (agent.isolation === "profile") {
+        const profileStatus = await getProfileStatus(agent.profile, agent.pid);
+        status = profileStatus === "running" ? "running" : profileStatus === "stopped" ? "stopped" : agent.status;
+      }
+    } catch {
+    }
+    statuses.push({
+      agentId,
+      containerId: agent.containerId,
+      status,
+      cpuPercent: stats.cpuPercent,
+      ramUsageMb: stats.ramUsageMb,
+      ramLimitMb: stats.ramLimitMb,
+      port: agent.port
+    });
+  }
+  return statuses;
+}
+function drainAcks() {
+  const acks = [...pendingAcks];
+  pendingAcks = [];
+  return acks;
+}
+function queueAcks(acks) {
+  pendingAcks.push(...acks);
+}
+async function shutdownAllAgents() {
+  log("INFO", `Shutting down ${agents.size} agent(s)...`);
+  const stopPromises = [];
+  for (const [agentId, agent] of agents) {
+    if (agent.status !== "running") continue;
+    log("INFO", `Stopping agent ${agentId}...`);
+    if (agent.isolation === "docker" && agent.containerId) {
+      stopPromises.push(
+        stopContainer(agent.containerId).catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          log("WARN", `Failed to stop agent ${agentId}: ${msg}`);
+        })
+      );
+    } else if (agent.isolation === "profile") {
+      stopPromises.push(
+        stopProfile(agent.profile).catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          log("WARN", `Failed to stop profile agent ${agentId}: ${msg}`);
+        })
+      );
+    }
+  }
+  await Promise.race([
+    Promise.all(stopPromises),
+    sleep2(15e3)
+    // 15s max shutdown time
+  ]);
+  log("INFO", "All agents stopped");
+}
+function loadAgents() {
+  try {
+    if (fs2.existsSync(AGENTS_FILE)) {
+      const raw = fs2.readFileSync(AGENTS_FILE, "utf-8");
+      const records = JSON.parse(raw);
+      agents = new Map(records.map((r) => [r.agentId, r]));
+      log("INFO", `Loaded ${agents.size} agent(s) from state file`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log("WARN", `Failed to load agents state: ${msg}`);
+    agents = /* @__PURE__ */ new Map();
+  }
+}
+function saveAgents() {
+  try {
+    const records = Array.from(agents.values());
+    fs2.writeFileSync(AGENTS_FILE, JSON.stringify(records, null, 2), "utf-8");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log("ERROR", `Failed to save agents state: ${msg}`);
+  }
+}
+async function reconcileAgents() {
+  if (agents.size === 0) return;
+  log("INFO", `Reconciling ${agents.size} persisted agent(s) with runtime...`);
+  for (const [agentId, agent] of agents) {
+    try {
+      if (agent.isolation === "docker" && agent.containerId) {
+        const running2 = await isContainerRunning(agent.containerId);
+        const newStatus = running2 ? "running" : "stopped";
+        if (agent.status !== newStatus) {
+          log("INFO", `Agent ${agentId}: ${agent.status} \u2192 ${newStatus} (reconciled)`);
+          agent.status = newStatus;
+        }
+      } else if (agent.isolation === "profile") {
+        const status = await getProfileStatus(agent.profile, agent.pid);
+        if (status !== agent.status && status !== "unknown") {
+          log("INFO", `Agent ${agentId}: ${agent.status} \u2192 ${status} (reconciled)`);
+          agent.status = status;
+        }
+      }
+    } catch {
+    }
+  }
+  saveAgents();
+}
+function allocatePort() {
+  const usedPorts = /* @__PURE__ */ new Set();
+  for (const agent of agents.values()) {
+    usedPorts.add(agent.port);
+  }
+  let port = BASE_PORT;
+  while (usedPorts.has(port)) {
+    port++;
+  }
+  return port;
+}
+function fetchConfig(configUrl, config) {
+  const fullUrl = configUrl.startsWith("http") ? configUrl : `${config.apiUrl}${configUrl}`;
+  return new Promise((resolve, reject) => {
+    const parsed = new import_node_url.URL(fullUrl);
+    const transport = parsed.protocol === "https:" ? https : http;
+    const req = transport.get(
+      fullUrl,
+      {
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`,
+          Accept: "application/json"
+        },
+        timeout: 3e4
+      },
+      (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          const body = Buffer.concat(chunks).toString("utf-8");
+          if (res.statusCode === 200) {
+            try {
+              resolve(JSON.parse(body));
+            } catch {
+              reject(new Error(`Invalid JSON in deploy config: ${body.slice(0, 200)}`));
+            }
+          } else {
+            reject(new Error(`Deploy config fetch failed: ${res.statusCode} \u2014 ${body.slice(0, 200)}`));
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.on("timeout", () => {
+      req.destroy(new Error("Config fetch timeout (30s)"));
+    });
+  });
+}
+function ensureDir(dir) {
+  try {
+    fs2.mkdirSync(dir, { recursive: true });
+  } catch {
+  }
+}
+function sleep2(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// src/heartbeat.ts
 var MIN_BACKOFF_MS = 1e3;
 var MAX_BACKOFF_MS = 3e5;
 var backoffMs = MIN_BACKOFF_MS;
@@ -241,29 +978,44 @@ function nextBackoff() {
   consecutiveFailures++;
   return current;
 }
+var openclawVersion = "unknown";
+function detectOpenclawVersion() {
+  try {
+    const { execFileSync } = require("node:child_process");
+    const out = execFileSync("openclaw", ["--version"], { timeout: 5e3, encoding: "utf-8" });
+    openclawVersion = out.trim().split("\n")[0] ?? "unknown";
+  } catch {
+    openclawVersion = "unknown";
+  }
+}
+detectOpenclawVersion();
 function request(url, options, body) {
   return new Promise((resolve, reject) => {
-    const parsed = new import_node_url.URL(url);
-    const transport = parsed.protocol === "https:" ? https : http;
-    const req = transport.request(url, {
-      ...options,
-      method: "POST",
-      headers: {
-        ...options.headers,
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(body)
-      }
-    }, (res) => {
-      const chunks = [];
-      res.on("data", (chunk) => chunks.push(chunk));
-      res.on("end", () => {
-        resolve({
-          statusCode: res.statusCode ?? 0,
-          headers: res.headers,
-          body: Buffer.concat(chunks).toString("utf-8")
+    const parsed = new import_node_url2.URL(url);
+    const transport = parsed.protocol === "https:" ? https2 : http2;
+    const req = transport.request(
+      url,
+      {
+        ...options,
+        method: "POST",
+        headers: {
+          ...options.headers,
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body)
+        }
+      },
+      (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          resolve({
+            statusCode: res.statusCode ?? 0,
+            headers: res.headers,
+            body: Buffer.concat(chunks).toString("utf-8")
+          });
         });
-      });
-    });
+      }
+    );
     req.on("error", reject);
     req.setTimeout(3e4, () => {
       req.destroy(new Error("Request timeout (30s)"));
@@ -274,14 +1026,20 @@ function request(url, options, body) {
 }
 var startTime = Date.now();
 async function sendHeartbeat(config, daemonVersion) {
-  const [cpuUsage, diskUsage, totalDiskGb] = await Promise.all([getCpuUsage(), getDiskUsage(), getTotalDiskGb()]);
+  const [cpuUsage, diskUsage, totalDiskGb, agentStatuses] = await Promise.all([
+    getCpuUsage(),
+    getDiskUsage(),
+    getTotalDiskGb(),
+    getAgentStatuses()
+  ]);
   const ramUsage = getRamUsage();
+  const commandAcks = drainAcks();
   const payload = {
     cpuUsage,
     ramUsage,
     diskUsage,
-    agentCount: 0,
-    agentStatuses: [],
+    agentCount: getAgentCount(),
+    agentStatuses,
     daemonVersion,
     osInfo: getOsInfo(),
     nodeVersion: process.version,
@@ -289,7 +1047,10 @@ async function sendHeartbeat(config, daemonVersion) {
     totalRamGb: getTotalRamGb(),
     totalDiskGb: totalDiskGb >= 0 ? totalDiskGb : 0,
     cpuCores: getCpuCores(),
-    cpuModel: getCpuModel()
+    cpuModel: getCpuModel(),
+    isolationMode: getIsolationMode(),
+    openclawVersion,
+    commandAcks
   };
   const url = `${config.apiUrl}/api/hosts/heartbeat`;
   const body = JSON.stringify(payload);
@@ -302,36 +1063,57 @@ async function sendHeartbeat(config, daemonVersion) {
     if (res.statusCode === 200 || res.statusCode === 201) {
       resetBackoff();
       const data = JSON.parse(res.body);
-      log("INFO", `Heartbeat sent (CPU: ${cpuUsage}%, RAM: ${ramUsage}%, Disk: ${diskUsage === -1 ? "N/A" : diskUsage + "%"})`);
+      const ackInfo = commandAcks.length > 0 ? `, sent ${commandAcks.length} ack(s)` : "";
+      log(
+        "INFO",
+        `Heartbeat sent (CPU: ${cpuUsage}%, RAM: ${ramUsage}%, Disk: ${diskUsage === -1 ? "N/A" : diskUsage + "%"}, agents: ${getAgentCount()}${ackInfo})`
+      );
+      if (data.commands && data.commands.length > 0) {
+        log("INFO", `Received ${data.commands.length} command(s) from platform`);
+        processCommands(data.commands).then((acks) => {
+          if (acks.length > 0) {
+            queueAcks(acks);
+            log("INFO", `Queued ${acks.length} command ack(s) for next heartbeat`);
+          }
+        }).catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          log("ERROR", `Command processing failed: ${msg}`);
+        });
+      }
       return data;
     }
     if (res.statusCode === 401 || res.statusCode === 403) {
       log("ERROR", `Authentication failed (${res.statusCode}). Check your API key.`);
       log("ERROR", "Heartbeats stopped \u2014 fix your API key and restart the daemon.");
+      if (commandAcks.length > 0) queueAcks(commandAcks);
       return null;
     }
     if (res.statusCode === 429) {
       const retryAfter = res.headers["retry-after"];
       const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1e3 : nextBackoff();
       log("WARN", `Rate limited (429). Retrying in ${Math.round(waitMs / 1e3)}s`);
-      await sleep2(waitMs);
+      if (commandAcks.length > 0) queueAcks(commandAcks);
+      await sleep3(waitMs);
       return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: waitMs };
     }
     if (res.statusCode >= 500) {
       const wait2 = nextBackoff();
       log("WARN", `Server error (${res.statusCode}). Retrying in ${Math.round(wait2 / 1e3)}s`);
-      await sleep2(wait2);
+      if (commandAcks.length > 0) queueAcks(commandAcks);
+      await sleep3(wait2);
       return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: wait2 };
     }
     log("WARN", `Unexpected response: ${res.statusCode} \u2014 ${res.body.slice(0, 200)}`);
+    if (commandAcks.length > 0) queueAcks(commandAcks);
     const wait = nextBackoff();
-    await sleep2(wait);
+    await sleep3(wait);
     return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: wait };
   } catch (err) {
     const wait = nextBackoff();
     const msg = err instanceof Error ? err.message : String(err);
     log("WARN", `Heartbeat failed: ${msg} \u2014 retrying in ${Math.round(wait / 1e3)}s (attempt ${consecutiveFailures})`);
-    await sleep2(wait);
+    if (commandAcks.length > 0) queueAcks(commandAcks);
+    await sleep3(wait);
     return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: wait };
   }
 }
@@ -343,15 +1125,13 @@ function startHeartbeatLoop(config, daemonVersion) {
     return Math.floor(Math.random() * 1e4) - 5e3;
   }
   async function tick() {
-    if (!running)
-      return;
+    if (!running) return;
     const result = await sendHeartbeat(config, daemonVersion);
     if (result === null) {
       running = false;
       return;
     }
-    if (!running)
-      return;
+    if (!running) return;
     const interval = result.nextHeartbeatMs > 0 ? Math.max(result.nextHeartbeatMs, 3e4) : config.heartbeatIntervalMs;
     const nextMs = interval + jitter();
     loopTimer = setTimeout(() => void tick(), Math.max(nextMs, 5e3));
@@ -365,18 +1145,18 @@ function stopHeartbeatLoop() {
     loopTimer = null;
   }
 }
-function sleep2(ms) {
+function sleep3(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// dist/index.js
+// src/index.ts
 var import_meta = {};
 function getDaemonVersion() {
   try {
-    const thisFile = (0, import_node_url2.fileURLToPath)(import_meta.url);
-    const distDir = path2.dirname(thisFile);
-    const pkgPath = path2.join(distDir, "..", "package.json");
-    const pkg = JSON.parse(fs2.readFileSync(pkgPath, "utf-8"));
+    const thisFile = (0, import_node_url3.fileURLToPath)(import_meta.url);
+    const distDir = path3.dirname(thisFile);
+    const pkgPath = path3.join(distDir, "..", "package.json");
+    const pkg = JSON.parse(fs3.readFileSync(pkgPath, "utf-8"));
     return pkg.version;
   } catch {
     return "0.0.0";
@@ -412,7 +1192,7 @@ CONFIGURATION
        }
 
 SIGNALS
-  SIGTERM, SIGINT   Graceful shutdown (stops heartbeat loop)
+  SIGTERM, SIGINT   Graceful shutdown (stops agents, then heartbeat loop)
 `);
 }
 if (args.includes("--help") || args.includes("-h")) {
@@ -451,6 +1231,14 @@ Sparebox Daemon v${VERSION} \u2014 Verify Mode
   console.log(`  Disk:       ${disk === -1 ? "N/A (could not determine)" : disk + "%"}`);
   console.log(`  OS:         ${getOsInfo()}`);
   console.log(`  Node.js:    ${process.version}`);
+  console.log("\n\u2500\u2500 Agent Manager \u2500\u2500");
+  if (errors.length === 0) {
+    const mode = await initAgentManager(config);
+    console.log(`  Isolation:  ${mode}`);
+    console.log(`  Agents:     ${getAgentCount()}`);
+  } else {
+    console.log("  (skipped \u2014 fix config errors first)");
+  }
   console.log("\n\u2500\u2500 Ready \u2500\u2500");
   if (errors.length > 0) {
     console.log("  \u2717 Fix config errors above before starting the daemon.");
@@ -479,20 +1267,28 @@ async function startDaemon() {
   log("INFO", `Host ID: ${config.hostId}`);
   log("INFO", `API URL: ${config.apiUrl}`);
   log("INFO", `Heartbeat interval: ${config.heartbeatIntervalMs / 1e3}s`);
+  const isolationMode2 = await initAgentManager(config);
+  log("INFO", `Isolation mode: ${isolationMode2}`);
+  log("INFO", `Tracked agents: ${getAgentCount()}`);
   let shuttingDown = false;
-  function shutdown(signal) {
-    if (shuttingDown)
-      return;
+  async function shutdown(signal) {
+    if (shuttingDown) return;
     shuttingDown = true;
     log("INFO", `Received ${signal} \u2014 shutting down gracefully`);
     stopHeartbeatLoop();
+    try {
+      await shutdownAllAgents();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log("ERROR", `Error during agent shutdown: ${msg}`);
+    }
     setTimeout(() => {
       log("INFO", "Daemon stopped");
       process.exit(0);
     }, 2e3);
   }
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
   log("INFO", "Starting heartbeat loop...");
   startHeartbeatLoop(config, VERSION);
 }

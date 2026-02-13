@@ -4,7 +4,8 @@
  * Sparebox Host Daemon
  *
  * A lightweight Node.js process that reports system metrics to the
- * Sparebox platform via periodic heartbeat POST requests.
+ * Sparebox platform via periodic heartbeat POST requests, and manages
+ * agent containers/profiles on the host.
  *
  * Usage:
  *   node daemon.js              Start the daemon
@@ -18,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfig, validateConfig, CONFIG_PATH } from "./config.js";
 import { getCpuUsage, getRamUsage, getDiskUsage, getOsInfo } from "./metrics.js";
 import { startHeartbeatLoop, stopHeartbeatLoop, sendHeartbeat } from "./heartbeat.js";
+import { initAgentManager, shutdownAllAgents, getIsolationMode, getAgentCount } from "./agent-manager.js";
 import { log } from "./log.js";
 
 // ---------------------------------------------------------------------------
@@ -73,7 +75,7 @@ CONFIGURATION
        }
 
 SIGNALS
-  SIGTERM, SIGINT   Graceful shutdown (stops heartbeat loop)
+  SIGTERM, SIGINT   Graceful shutdown (stops agents, then heartbeat loop)
 `);
 }
 
@@ -125,7 +127,17 @@ async function runVerify(): Promise<void> {
   console.log(`  OS:         ${getOsInfo()}`);
   console.log(`  Node.js:    ${process.version}`);
 
-  // 3. Summary
+  // 3. Agent Manager
+  console.log("\n── Agent Manager ──");
+  if (errors.length === 0) {
+    const mode = await initAgentManager(config);
+    console.log(`  Isolation:  ${mode}`);
+    console.log(`  Agents:     ${getAgentCount()}`);
+  } else {
+    console.log("  (skipped — fix config errors first)");
+  }
+
+  // 4. Summary
   console.log("\n── Ready ──");
   if (errors.length > 0) {
     console.log("  ✗ Fix config errors above before starting the daemon.");
@@ -164,14 +176,29 @@ async function startDaemon(): Promise<void> {
   log("INFO", `API URL: ${config.apiUrl}`);
   log("INFO", `Heartbeat interval: ${config.heartbeatIntervalMs / 1000}s`);
 
-  // 2. Graceful shutdown
+  // 2. Initialize agent manager
+  const isolationMode = await initAgentManager(config);
+  log("INFO", `Isolation mode: ${isolationMode}`);
+  log("INFO", `Tracked agents: ${getAgentCount()}`);
+
+  // 3. Graceful shutdown
   let shuttingDown = false;
 
-  function shutdown(signal: string): void {
+  async function shutdown(signal: string): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     log("INFO", `Received ${signal} — shutting down gracefully`);
+
+    // Stop heartbeat loop first
     stopHeartbeatLoop();
+
+    // Stop all running agents
+    try {
+      await shutdownAllAgents();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log("ERROR", `Error during agent shutdown: ${msg}`);
+    }
 
     // Give any in-flight requests a moment to complete
     setTimeout(() => {
@@ -180,10 +207,10 @@ async function startDaemon(): Promise<void> {
     }, 2000);
   }
 
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 
-  // 3. Start heartbeat loop
+  // 4. Start heartbeat loop
   log("INFO", "Starting heartbeat loop...");
   startHeartbeatLoop(config, VERSION);
 }
