@@ -56,15 +56,15 @@ echo -e "\${GREEN}✓\${NC} Directory: \$SPAREBOX_DIR"
 # Download daemon bundle
 echo ""
 echo -e "\${BLUE}Downloading Sparebox daemon...\${NC}"
-curl -fsSL "\$DAEMON_URL" -o "\$SPAREBOX_DIR/daemon.tar.gz"
+curl -fsSL "\$DAEMON_URL" -o "\$SPAREBOX_DIR/sparebox-daemon.cjs"
 
-# Extract
-cd "\$SPAREBOX_DIR"
-tar -xzf daemon.tar.gz 2>/dev/null || {
-    # If not a tarball, it might be a single JS file
-    mv daemon.tar.gz daemon.js 2>/dev/null || true
-}
-rm -f daemon.tar.gz
+# Verify download is actual JS (not JSON error)
+if head -1 "\$SPAREBOX_DIR/sparebox-daemon.cjs" | grep -q '^{'; then
+    echo -e "\${RED}✗ Download failed — received error response instead of daemon code.\${NC}"
+    cat "\$SPAREBOX_DIR/sparebox-daemon.cjs"
+    rm -f "\$SPAREBOX_DIR/sparebox-daemon.cjs"
+    exit 1
+fi
 
 echo -e "\${GREEN}✓\${NC} Daemon downloaded"
 
@@ -114,10 +114,8 @@ fi
 # Verify installation
 echo ""
 echo -e "\${BLUE}Verifying installation...\${NC}"
-if [ -f "\$SPAREBOX_DIR/dist/index.js" ]; then
-    node "\$SPAREBOX_DIR/dist/index.js" --verify && echo "" || true
-elif [ -f "\$SPAREBOX_DIR/daemon.js" ]; then
-    node "\$SPAREBOX_DIR/daemon.js" --verify && echo "" || true
+if [ -f "\$SPAREBOX_DIR/sparebox-daemon.cjs" ]; then
+    node "\$SPAREBOX_DIR/sparebox-daemon.cjs" --verify && echo "" || true
 fi
 
 # Systemd service setup (Linux only)
@@ -128,8 +126,7 @@ if command -v systemctl &> /dev/null && [ -d "/etc/systemd/system" ] || [ -d "\$
         SERVICE_DIR="\$HOME/.config/systemd/user"
         mkdir -p "\$SERVICE_DIR"
         
-        DAEMON_PATH="\$SPAREBOX_DIR/dist/index.js"
-        [ ! -f "\$DAEMON_PATH" ] && DAEMON_PATH="\$SPAREBOX_DIR/daemon.js"
+        DAEMON_PATH="\$SPAREBOX_DIR/sparebox-daemon.cjs"
         
         cat > "\$SERVICE_DIR/sparebox-daemon.service" << EOFSVC
 [Unit]
@@ -164,11 +161,7 @@ echo -e "║         Installation Complete! ✓         ║"
 echo -e "╚══════════════════════════════════════════╝\${NC}"
 echo ""
 echo "To start manually:"
-if [ -f "\$SPAREBOX_DIR/dist/index.js" ]; then
-    echo "  node \$SPAREBOX_DIR/dist/index.js"
-else
-    echo "  node \$SPAREBOX_DIR/daemon.js"
-fi
+echo "  node \$SPAREBOX_DIR/sparebox-daemon.cjs"
 echo ""
 echo "Dashboard: https://www.sparebox.dev/dashboard/hosts"
 echo "Docs:      https://www.sparebox.dev/install"
