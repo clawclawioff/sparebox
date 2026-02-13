@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { db } from "@/db";
-import { agents, subscriptions, hosts, user } from "@/db/schema";
+import { agents, subscriptions, hosts, user, agentCommands } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import type Stripe from "stripe";
-import { PLATFORM_FEE_PERCENT } from "@/lib/constants";
+import { PLATFORM_FEE_PERCENT, TIERS, type TierKey } from "@/lib/constants";
 import { sendDeploySuccessEmail, sendPaymentFailedEmail } from "@/lib/email/notifications";
 
 export async function POST(req: NextRequest) {
@@ -134,7 +134,8 @@ async function handleCheckoutCompleted(session: any) {
     return;
   }
 
-  const { userId, agentName, hostId, config } = metadata;
+  const { userId, agentName, hostId, config, tier: metadataTier } = metadata;
+  const tier = (metadataTier as TierKey) || "standard";
 
   // Idempotency: check if we already created an agent for this checkout session
   const stripeSubscriptionId = typeof session.subscription === "string"
@@ -197,29 +198,59 @@ async function handleCheckoutCompleted(session: any) {
       ? `${agentName}-${stripeSubscriptionId?.slice(-6) || Date.now()}`
       : agentName;
 
+    // Resolve price for this tier
+    const tierPriceMap: Record<string, number | null> = {
+      lite: host.priceLite,
+      standard: host.priceStandard,
+      pro: host.pricePro,
+      compute: host.priceCompute,
+    };
+    const tierPrice = tierPriceMap[tier] ?? host.pricePerMonth;
+
     const [agent] = await tx
       .insert(agents)
       .values({
         name: finalAgentName,
         userId: userId,
         hostId: hostId,
-        config: config || null,
+        config: config ? JSON.parse(config) : {},
+        tier: tier,
         status: "pending",
       })
       .returning();
 
-    const platformFee = Math.round(host.pricePerMonth * (PLATFORM_FEE_PERCENT / 100));
-    const hostPayout = host.pricePerMonth - platformFee;
+    const platformFee = Math.round(tierPrice * (PLATFORM_FEE_PERCENT / 100));
+    const hostPayout = tierPrice - platformFee;
 
     await tx.insert(subscriptions).values({
       userId: userId,
       agentId: agent.id,
       hostId: host.id,
       stripeSubscriptionId: stripeSubscriptionId,
-      pricePerMonth: host.pricePerMonth,
+      tier: tier,
+      pricePerMonth: tierPrice,
       hostPayoutPerMonth: hostPayout,
       platformFeePerMonth: platformFee,
       status: "active",
+    });
+
+    // Create deploy command for the daemon
+    const tierInfo = TIERS[tier as TierKey] || TIERS.standard;
+    await tx.insert(agentCommands).values({
+      agentId: agent.id,
+      hostId: host.id,
+      type: "deploy",
+      payload: {
+        profile: `sparebox-agent-${agent.id.slice(0, 8)}`,
+        configUrl: `/api/agents/${agent.id}/deploy-config`,
+        tier: tier,
+        resources: {
+          ramMb: tierInfo.ramMb,
+          cpuCores: tierInfo.cpuCores,
+          diskGb: tierInfo.diskGb,
+        },
+      },
+      status: "pending",
     });
 
     createdAgentId = agent.id;

@@ -83,16 +83,26 @@ export const hostsRouter = router({
         country: z.string().optional(),
         city: z.string().optional(),
         pricePerMonth: z.number().int().positive().default(1000), // cents
+        // Per-tier pricing (optional — null means tier not offered)
+        priceLite: z.number().int().positive().nullable().optional(),
+        priceStandard: z.number().int().positive().nullable().optional(),
+        pricePro: z.number().int().positive().nullable().optional(),
+        priceCompute: z.number().int().positive().nullable().optional(),
+        maxAgents: z.number().int().positive().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // If no per-tier prices, default standard to pricePerMonth
+      const values = {
+        ...input,
+        userId: ctx.user.id,
+        status: "pending" as const,
+        priceStandard: input.priceStandard ?? input.pricePerMonth,
+      };
+
       const [host] = await ctx.db
         .insert(hosts)
-        .values({
-          ...input,
-          userId: ctx.user.id,
-          status: "pending",
-        })
+        .values(values)
         .returning();
 
       return host;
@@ -106,6 +116,11 @@ export const hostsRouter = router({
         name: z.string().min(1).max(100).optional(),
         description: z.string().max(500).optional(),
         pricePerMonth: z.number().int().positive().optional(),
+        priceLite: z.number().int().positive().nullable().optional(),
+        priceStandard: z.number().int().positive().nullable().optional(),
+        pricePro: z.number().int().positive().nullable().optional(),
+        priceCompute: z.number().int().positive().nullable().optional(),
+        maxAgents: z.number().int().positive().nullable().optional(),
         status: z.enum(["active", "inactive"]).optional(),
       })
     )

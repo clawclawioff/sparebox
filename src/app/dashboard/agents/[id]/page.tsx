@@ -341,7 +341,9 @@ export default function AgentDetailsPage() {
           </div>
           <div className="bg-muted rounded-lg p-4 font-mono text-xs text-foreground h-80 overflow-y-auto">
             <pre>
-              {agent.config ||
+              {(agent.config && Object.keys(agent.config as Record<string, unknown>).length > 0
+                ? JSON.stringify(agent.config, null, 2)
+                : null) ||
                 `# openclaw.yaml
 auth:
   provider: anthropic

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { z } from "zod";
 import { db } from "@/db";
-import { hostApiKeys, hostHeartbeats, hosts } from "@/db/schema";
+import { hostApiKeys, hostHeartbeats, hosts, agentCommands, agents } from "@/db/schema";
 import { eq, and, isNull, inArray } from "drizzle-orm";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
@@ -10,6 +10,7 @@ import {
   API_KEY_PREFIX,
   HEARTBEAT_INTERVAL_MS,
   HEARTBEAT_RATE_LIMIT_PER_SEC,
+  COMMAND_EXPIRY_MS,
 } from "@/lib/constants";
 
 // =============================================================================
@@ -55,6 +56,20 @@ const heartbeatSchema = z.object({
   totalDiskGb: z.number().min(0).optional(),
   cpuCores: z.number().int().min(1).optional(),
   cpuModel: z.string().max(200).optional(),
+  // Docker/isolation info
+  isolationMode: z.enum(["docker", "podman", "profile", "none"]).optional(),
+  openclawVersion: z.string().max(50).optional(),
+  // Command acknowledgments from previous heartbeat
+  commandAcks: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        status: z.enum(["acked", "failed"]),
+        error: z.string().max(1000).optional(),
+        containerId: z.string().max(100).optional(),
+      })
+    )
+    .default([]),
 });
 
 // =============================================================================
@@ -156,6 +171,8 @@ export async function POST(req: NextRequest) {
       daemonVersion: data.daemonVersion,
       nodeVersion: data.nodeVersion || null,
       publicIp: data.publicIp || null,
+      isolationMode: data.isolationMode || null,
+      openclawVersion: data.openclawVersion || null,
       updatedAt: new Date(),
     })
     .where(eq(hosts.id, keyRecord.hostId));
@@ -235,17 +252,135 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 8. Update key last_used_at
+  // 8. Process command acknowledgments from daemon
+  if (data.commandAcks.length > 0) {
+    for (const ack of data.commandAcks) {
+      try {
+        await db
+          .update(agentCommands)
+          .set({
+            status: ack.status,
+            ackedAt: new Date(),
+            error: ack.error || null,
+          })
+          .where(
+            and(
+              eq(agentCommands.id, ack.id),
+              eq(agentCommands.hostId, keyRecord.hostId)
+            )
+          );
+
+        // If ack was successful, update agent status based on command type
+        const cmd = await db.query.agentCommands.findFirst({
+          where: eq(agentCommands.id, ack.id),
+          columns: { agentId: true, type: true },
+        });
+
+        if (cmd && ack.status === "acked") {
+          if (cmd.type === "deploy" || cmd.type === "start") {
+            await db
+              .update(agents)
+              .set({
+                status: "running",
+                containerId: ack.containerId || null,
+                updatedAt: new Date(),
+              })
+              .where(eq(agents.id, cmd.agentId));
+          } else if (cmd.type === "stop") {
+            await db
+              .update(agents)
+              .set({ status: "stopped", updatedAt: new Date() })
+              .where(eq(agents.id, cmd.agentId));
+          } else if (cmd.type === "undeploy") {
+            await db
+              .update(agents)
+              .set({
+                status: "stopped",
+                containerId: null,
+                updatedAt: new Date(),
+              })
+              .where(eq(agents.id, cmd.agentId));
+          }
+        }
+
+        // If command failed, mark agent as failed (for deploy)
+        if (cmd && ack.status === "failed" && cmd.type === "deploy") {
+          await db
+            .update(agents)
+            .set({ status: "failed", updatedAt: new Date() })
+            .where(eq(agents.id, cmd.agentId));
+        }
+      } catch (err) {
+        console.error(`[Heartbeat] Failed to process ack ${ack.id}:`, err);
+      }
+    }
+  }
+
+  // 9. Expire old pending commands (>5 min)
+  try {
+    const expiryDate = new Date(Date.now() - COMMAND_EXPIRY_MS);
+    await db
+      .update(agentCommands)
+      .set({ status: "expired" })
+      .where(
+        and(
+          eq(agentCommands.hostId, keyRecord.hostId),
+          eq(agentCommands.status, "sent"),
+          // Commands sent before expiry threshold
+        )
+      );
+  } catch {
+    // Non-critical — don't fail the heartbeat
+  }
+
+  // 10. Fetch pending commands for this host
+  let pendingCommands: Array<{
+    id: string;
+    type: string;
+    agentId: string;
+    payload: unknown;
+  }> = [];
+
+  try {
+    const pending = await db.query.agentCommands.findMany({
+      where: and(
+        eq(agentCommands.hostId, keyRecord.hostId),
+        eq(agentCommands.status, "pending")
+      ),
+      orderBy: (cmd, { asc }) => [asc(cmd.createdAt)],
+      limit: 10,
+    });
+
+    if (pending.length > 0) {
+      pendingCommands = pending.map((cmd) => ({
+        id: cmd.id,
+        type: cmd.type,
+        agentId: cmd.agentId,
+        payload: cmd.payload,
+      }));
+
+      // Mark as sent
+      const commandIds = pending.map((c) => c.id);
+      await db
+        .update(agentCommands)
+        .set({ status: "sent", sentAt: new Date() })
+        .where(inArray(agentCommands.id, commandIds));
+    }
+  } catch (err) {
+    console.error("[Heartbeat] Failed to fetch pending commands:", err);
+  }
+
+  // 11. Update key last_used_at
   await db
     .update(hostApiKeys)
     .set({ lastUsedAt: new Date() })
     .where(eq(hostApiKeys.id, keyRecord.id));
 
-  // 9. Return response
+  // 12. Return response
   return NextResponse.json({
     ok: true,
     ts: Date.now(),
-    commands: [], // Future: deploy/stop/update commands
+    commands: pendingCommands,
     nextHeartbeatMs: HEARTBEAT_INTERVAL_MS,
   });
 }

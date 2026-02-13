@@ -18,3 +18,44 @@ export const HEARTBEAT_REACTIVATE_THRESHOLD_MS = 2 * 60_000; // 2 minutes
 // API key
 export const API_KEY_PREFIX = "sbx_host_";
 export const API_KEY_ENTROPY_BYTES = 32; // 32 bytes = 64 hex chars
+
+// Resource tiers
+export const TIERS = {
+  lite: {
+    name: "Lite",
+    ramMb: 1024,
+    cpuCores: 0.5,
+    diskGb: 5,
+    description: "Simple chatbots, webhook-only agents, API-only workloads",
+  },
+  standard: {
+    name: "Standard",
+    ramMb: 2048,
+    cpuCores: 1,
+    diskGb: 10,
+    description: "Most agents — chat, tools, memory, moderate traffic",
+  },
+  pro: {
+    name: "Pro",
+    ramMb: 4096,
+    cpuCores: 2,
+    diskGb: 20,
+    description: "Browser automation, multi-channel, coding agents",
+  },
+  compute: {
+    name: "Compute",
+    ramMb: 8192,
+    cpuCores: 4,
+    diskGb: 40,
+    description: "Local model inference (Ollama 7B), heavy automation",
+  },
+} as const;
+
+export type TierKey = keyof typeof TIERS;
+
+// System overhead reserved on each host (not allocatable to agents)
+export const HOST_OVERHEAD_RAM_MB = 1024;
+export const HOST_OVERHEAD_CPU_CORES = 0.5;
+
+// Command queue
+export const COMMAND_EXPIRY_MS = 5 * 60_000; // 5 minutes

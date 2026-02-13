@@ -7,6 +7,7 @@ import {
   real,
   uuid,
   pgEnum,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -121,6 +122,13 @@ export const hosts = pgTable("hosts", {
 
   // Pricing (cents per month)
   pricePerMonth: integer("price_per_month").notNull().default(1000),
+  priceLite: integer("price_lite"),
+  priceStandard: integer("price_standard"),
+  pricePro: integer("price_pro"),
+  priceCompute: integer("price_compute"),
+  maxAgents: integer("max_agents"),
+  isolationMode: text("isolation_mode").default("unknown"),
+  openclawVersion: text("openclaw_version"),
 
   // Spec verification (from daemon heartbeat)
   specsVerified: boolean("specs_verified").default(false),
@@ -155,7 +163,12 @@ export const agents = pgTable("agents", {
   hostId: uuid("host_id").references(() => hosts.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   status: agentStatusEnum("status").notNull().default("pending"),
-  config: text("config"),
+  config: jsonb("config").default({}),
+  tier: text("tier").notNull().default("standard"),
+  workspaceFiles: jsonb("workspace_files").default({}),
+  encryptedApiKey: text("encrypted_api_key"),
+  containerId: text("container_id"),
+  isolationMode: text("isolation_mode").default("docker"),
   openclawVersion: text("openclaw_version").default("latest"),
   lastActive: timestamp("last_active"),
   totalUptime: integer("total_uptime").default(0),
@@ -178,6 +191,7 @@ export const subscriptions = pgTable("subscriptions", {
   status: subscriptionStatusEnum("status").notNull().default("active"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   stripePriceId: text("stripe_price_id"),
+  tier: text("tier"),
   pricePerMonth: integer("price_per_month").notNull(),
   hostPayoutPerMonth: integer("host_payout_per_month").notNull(),
   platformFeePerMonth: integer("platform_fee_per_month").notNull(),
@@ -252,6 +266,24 @@ export const userPreferences = pgTable("user_preferences", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Agent Commands (command queue for daemon)
+export const agentCommands = pgTable("agent_commands", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agents.id, { onDelete: "cascade" }),
+  hostId: uuid("host_id")
+    .notNull()
+    .references(() => hosts.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // deploy, start, stop, restart, undeploy, update_config
+  payload: jsonb("payload"),
+  status: text("status").notNull().default("pending"), // pending, sent, acked, failed, expired
+  createdAt: timestamp("created_at").defaultNow(),
+  sentAt: timestamp("sent_at"),
+  ackedAt: timestamp("acked_at"),
+  error: text("error"),
+});
+
 // Waitlist (email capture for early access)
 export const waitlist = pgTable("waitlist", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -287,12 +319,14 @@ export const hostsRelations = relations(hosts, ({ one, many }) => ({
   subscriptions: many(subscriptions),
   payouts: many(payouts),
   apiKeys: many(hostApiKeys),
+  commands: many(agentCommands),
 }));
 
 export const agentsRelations = relations(agents, ({ one, many }) => ({
   user: one(user, { fields: [agents.userId], references: [user.id] }),
   host: one(hosts, { fields: [agents.hostId], references: [hosts.id] }),
   subscriptions: many(subscriptions),
+  commands: many(agentCommands),
 }));
 
 export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
@@ -311,6 +345,11 @@ export const hostHeartbeatsRelations = relations(hostHeartbeats, ({ one }) => ({
 
 export const hostApiKeysRelations = relations(hostApiKeys, ({ one }) => ({
   host: one(hosts, { fields: [hostApiKeys.hostId], references: [hosts.id] }),
+}));
+
+export const agentCommandsRelations = relations(agentCommands, ({ one }) => ({
+  agent: one(agents, { fields: [agentCommands.agentId], references: [agents.id] }),
+  host: one(hosts, { fields: [agentCommands.hostId], references: [hosts.id] }),
 }));
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({

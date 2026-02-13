@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { router, protectedProcedure, adminProcedure } from "../trpc";
 import { TRPCError } from "@trpc/server";
-import { agents, hosts, subscriptions } from "@/db";
-import { eq, and } from "drizzle-orm";
-import { PLATFORM_FEE_PERCENT } from "@/lib/constants";
+import { agents, hosts, subscriptions, agentCommands } from "@/db";
+import { eq, and, desc } from "drizzle-orm";
+import { PLATFORM_FEE_PERCENT, TIERS, type TierKey } from "@/lib/constants";
+import { encrypt } from "@/lib/encryption";
 import Stripe from "stripe";
 
 export const agentsRouter = router({
@@ -144,7 +145,7 @@ export const agentsRouter = router({
       return updated;
     }),
 
-  // Stop an agent
+  // Stop an agent (via command queue)
   stop: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -153,13 +154,19 @@ export const agentsRouter = router({
       });
 
       if (!existing || existing.userId !== ctx.user.id) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Agent not found",
-        });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agent not found" });
       }
 
-      // TODO: Send stop command to host
+      // Queue stop command if agent is on a host
+      if (existing.hostId) {
+        await ctx.db.insert(agentCommands).values({
+          agentId: existing.id,
+          hostId: existing.hostId,
+          type: "stop",
+          payload: { profile: `sparebox-agent-${existing.id.slice(0, 8)}` },
+          status: "pending",
+        });
+      }
 
       const [updated] = await ctx.db
         .update(agents)
@@ -170,7 +177,7 @@ export const agentsRouter = router({
       return updated;
     }),
 
-  // Start an agent
+  // Start an agent (via command queue)
   start: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -179,20 +186,30 @@ export const agentsRouter = router({
       });
 
       if (!existing || existing.userId !== ctx.user.id) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Agent not found",
-        });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agent not found" });
       }
 
       if (!existing.hostId) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Agent has no host assigned",
-        });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Agent has no host assigned" });
       }
 
-      // TODO: Send start command to host
+      const tier = TIERS[(existing.tier as TierKey) || "standard"] || TIERS.standard;
+
+      await ctx.db.insert(agentCommands).values({
+        agentId: existing.id,
+        hostId: existing.hostId,
+        type: "start",
+        payload: {
+          profile: `sparebox-agent-${existing.id.slice(0, 8)}`,
+          configUrl: `/api/agents/${existing.id}/deploy-config`,
+          resources: {
+            ramMb: tier.ramMb,
+            cpuCores: tier.cpuCores,
+            diskGb: tier.diskGb,
+          },
+        },
+        status: "pending",
+      });
 
       const [updated] = await ctx.db
         .update(agents)
@@ -201,6 +218,158 @@ export const agentsRouter = router({
         .returning();
 
       return updated;
+    }),
+
+  // Send a command to the host daemon for an agent
+  sendCommand: protectedProcedure
+    .input(
+      z.object({
+        agentId: z.string().uuid(),
+        type: z.enum(["deploy", "start", "stop", "restart", "undeploy", "update_config"]),
+        payload: z.record(z.string(), z.unknown()).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agent = await ctx.db.query.agents.findFirst({
+        where: eq(agents.id, input.agentId),
+      });
+
+      if (!agent || agent.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agent not found" });
+      }
+
+      if (!agent.hostId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Agent has no host assigned" });
+      }
+
+      // Build command payload
+      const tier = TIERS[(agent.tier as TierKey) || "standard"] || TIERS.standard;
+      const commandPayload = {
+        ...input.payload,
+        profile: `sparebox-agent-${agent.id.slice(0, 8)}`,
+        tier: agent.tier,
+        resources: {
+          ramMb: tier.ramMb,
+          cpuCores: tier.cpuCores,
+          diskGb: tier.diskGb,
+        },
+        configUrl: `/api/agents/${agent.id}/deploy-config`,
+      };
+
+      const [command] = await ctx.db
+        .insert(agentCommands)
+        .values({
+          agentId: agent.id,
+          hostId: agent.hostId,
+          type: input.type,
+          payload: commandPayload,
+          status: "pending",
+        })
+        .returning();
+
+      // Update agent status based on command type
+      const statusMap: Record<string, string> = {
+        deploy: "deploying",
+        start: "deploying",
+        stop: "stopped",
+        restart: "deploying",
+        undeploy: "stopped",
+      };
+
+      const newStatus = statusMap[input.type];
+      if (newStatus) {
+        await ctx.db
+          .update(agents)
+          .set({ status: newStatus as any, updatedAt: new Date() })
+          .where(eq(agents.id, agent.id));
+      }
+
+      return { commandId: command.id, status: command.status };
+    }),
+
+  // Update agent configuration (and trigger re-deploy)
+  updateConfig: protectedProcedure
+    .input(
+      z.object({
+        agentId: z.string().uuid(),
+        config: z.record(z.string(), z.unknown()).optional(),
+        workspaceFiles: z.record(z.string(), z.string()).optional(),
+        apiKey: z.string().optional(), // Plaintext — will be encrypted
+        tier: z.enum(["lite", "standard", "pro", "compute"]).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agent = await ctx.db.query.agents.findFirst({
+        where: eq(agents.id, input.agentId),
+      });
+
+      if (!agent || agent.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agent not found" });
+      }
+
+      // Build update set
+      const updateData: Record<string, unknown> = { updatedAt: new Date() };
+
+      if (input.config !== undefined) {
+        updateData.config = input.config;
+      }
+      if (input.workspaceFiles !== undefined) {
+        updateData.workspaceFiles = input.workspaceFiles;
+      }
+      if (input.apiKey !== undefined) {
+        updateData.encryptedApiKey = encrypt(input.apiKey);
+      }
+      if (input.tier !== undefined) {
+        updateData.tier = input.tier;
+      }
+
+      const [updated] = await ctx.db
+        .update(agents)
+        .set(updateData)
+        .where(eq(agents.id, input.agentId))
+        .returning();
+
+      // If agent is deployed and running, send update_config command
+      if (agent.hostId && (agent.status === "running" || agent.status === "deploying")) {
+        const tier = TIERS[((input.tier || agent.tier) as TierKey) || "standard"] || TIERS.standard;
+        await ctx.db.insert(agentCommands).values({
+          agentId: agent.id,
+          hostId: agent.hostId,
+          type: "update_config",
+          payload: {
+            profile: `sparebox-agent-${agent.id.slice(0, 8)}`,
+            configUrl: `/api/agents/${agent.id}/deploy-config`,
+            resources: {
+              ramMb: tier.ramMb,
+              cpuCores: tier.cpuCores,
+              diskGb: tier.diskGb,
+            },
+          },
+          status: "pending",
+        });
+      }
+
+      return updated;
+    }),
+
+  // Get recent commands for an agent
+  getCommands: protectedProcedure
+    .input(z.object({ agentId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const agent = await ctx.db.query.agents.findFirst({
+        where: eq(agents.id, input.agentId),
+        columns: { userId: true },
+      });
+
+      if (!agent || agent.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agent not found" });
+      }
+
+      return ctx.db.query.agentCommands.findMany({
+        where: eq(agentCommands.agentId, input.agentId),
+        orderBy: [desc(agentCommands.createdAt)],
+        limit: 20,
+      });
     }),
 
   // Delete an agent
@@ -218,7 +387,16 @@ export const agentsRouter = router({
         });
       }
 
-      // TODO: Stop agent on host first
+      // Send undeploy command to host (will be cleaned up when agent is cascade-deleted)
+      if (existing.hostId) {
+        await ctx.db.insert(agentCommands).values({
+          agentId: existing.id,
+          hostId: existing.hostId,
+          type: "undeploy",
+          payload: { profile: `sparebox-agent-${existing.id.slice(0, 8)}` },
+          status: "pending",
+        });
+      }
 
       // Cancel active Stripe subscriptions before deleting DB records
       const agentSubs = await ctx.db.query.subscriptions.findMany({

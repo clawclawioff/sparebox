@@ -4,7 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { getStripe } from "@/lib/stripe";
 import { hosts, user, subscriptions, agents } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-import { PLATFORM_FEE_PERCENT } from "@/lib/constants";
+import { PLATFORM_FEE_PERCENT, TIERS, type TierKey } from "@/lib/constants";
 
 export const billingRouter = router({
   createCheckoutSession: protectedProcedure
@@ -12,6 +12,7 @@ export const billingRouter = router({
       z.object({
         agentName: z.string().min(1).max(100),
         hostId: z.string().uuid(),
+        tier: z.enum(["lite", "standard", "pro", "compute"]).default("standard"),
         config: z.string().optional(),
       })
     )
@@ -27,6 +28,28 @@ export const billingRouter = router({
           message: "Host not available",
         });
       }
+
+      // Resolve tier price
+      const tierPriceMap: Record<string, number | null> = {
+        lite: host.priceLite,
+        standard: host.priceStandard,
+        pro: host.pricePro,
+        compute: host.priceCompute,
+      };
+
+      const tierPrice = tierPriceMap[input.tier];
+
+      // Fall back to pricePerMonth for backward compat (existing hosts without tier pricing)
+      const price = tierPrice ?? host.pricePerMonth;
+
+      if (!price || price <= 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Host does not offer the ${input.tier} tier`,
+        });
+      }
+
+      const tierInfo = TIERS[input.tier as TierKey];
 
       // Look up the host's user to get their Connect account
       const hostUser = await ctx.db.query.user.findFirst({
@@ -53,9 +76,9 @@ export const billingRouter = router({
               currency: "usd",
               product_data: {
                 name: `AI Agent: ${input.agentName}`,
-                description: `Hosted on ${host.name} (${host.cpuCores} cores, ${host.ramGb}GB RAM)`,
+                description: `${tierInfo.name} Tier (${tierInfo.ramMb / 1024}GB RAM, ${tierInfo.cpuCores} CPU) on ${host.name}`,
               },
-              unit_amount: host.pricePerMonth, // already in cents
+              unit_amount: price,
               recurring: {
                 interval: "month",
               },
@@ -70,6 +93,7 @@ export const billingRouter = router({
           userId: ctx.user.id,
           agentName: input.agentName,
           hostId: input.hostId,
+          tier: input.tier,
           config: input.config || "",
         },
         success_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.sparebox.dev"}/dashboard/agents?deployed=true`,
