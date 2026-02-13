@@ -69,12 +69,20 @@ fi
 echo -e "\${GREEN}✓\${NC} Daemon downloaded"
 
 # Function to configure daemon (must be defined before use)
+# Reads from /dev/tty so it works when piped (curl | bash)
 configure_daemon() {
-    read -p "API Key (sbx_host_...): " API_KEY
-    read -p "Host ID (UUID): " HOST_ID
+    echo -e "\${YELLOW}Enter your credentials from the Sparebox dashboard.\${NC}"
+    echo "  (Get them at: https://www.sparebox.dev/dashboard/hosts)"
+    echo "  Press Enter to skip and configure later."
+    echo ""
+    printf "API Key (sbx_host_...): "
+    read API_KEY < /dev/tty
+    printf "Host ID (UUID): "
+    read HOST_ID < /dev/tty
 
     if [ -z "\$API_KEY" ] || [ -z "\$HOST_ID" ]; then
-        echo -e "\${YELLOW}⚠ Skipping config — you can set it later:\${NC}"
+        echo ""
+        echo -e "\${YELLOW}⚠ Skipping config — you can configure later:\${NC}"
         echo "  export SPAREBOX_API_KEY=<your-key>"
         echo "  export SPAREBOX_HOST_ID=<your-host-id>"
         echo "  Or edit: \$SPAREBOX_DIR/config.json"
@@ -94,14 +102,13 @@ EOFCONF
 # Get configuration
 echo ""
 echo -e "\${YELLOW}Configuration\${NC}"
-echo "You need your API Key and Host ID from the Sparebox dashboard."
-echo "Go to: https://www.sparebox.dev/dashboard/hosts"
 echo ""
 
 # Check if config already exists
 if [ -f "\$SPAREBOX_DIR/config.json" ]; then
     echo -e "\${YELLOW}Existing config found at \$SPAREBOX_DIR/config.json\${NC}"
-    read -p "Overwrite? (y/N): " OVERWRITE
+    printf "Overwrite? (y/N): "
+    read OVERWRITE < /dev/tty
     if [ "\$OVERWRITE" != "y" ] && [ "\$OVERWRITE" != "Y" ]; then
         echo "Keeping existing config."
     else
@@ -121,7 +128,8 @@ fi
 # Systemd service setup (Linux only)
 if command -v systemctl &> /dev/null && [ -d "/etc/systemd/system" ] || [ -d "\$HOME/.config/systemd/user" ]; then
     echo ""
-    read -p "Set up as a systemd service (auto-start on boot)? (y/N): " SETUP_SERVICE
+    printf "Set up as a systemd service (auto-start on boot)? (y/N): "
+    read SETUP_SERVICE < /dev/tty
     if [ "\$SETUP_SERVICE" = "y" ] || [ "\$SETUP_SERVICE" = "Y" ]; then
         SERVICE_DIR="\$HOME/.config/systemd/user"
         mkdir -p "\$SERVICE_DIR"
