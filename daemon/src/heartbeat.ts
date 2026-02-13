@@ -2,7 +2,7 @@ import * as https from "node:https";
 import * as http from "node:http";
 import { URL } from "node:url";
 import { log } from "./log.js";
-import { getCpuUsage, getRamUsage, getDiskUsage, getOsInfo } from "./metrics.js";
+import { getCpuUsage, getRamUsage, getDiskUsage, getOsInfo, getTotalRamGb, getCpuCores, getCpuModel } from "./metrics.js";
 import type { DaemonConfig } from "./config.js";
 
 // ---------------------------------------------------------------------------
@@ -19,6 +19,9 @@ export interface HeartbeatPayload {
   osInfo: string;
   nodeVersion: string;
   uptime: number;
+  totalRamGb: number;
+  cpuCores: number;
+  cpuModel: string;
 }
 
 export interface HeartbeatResponse {
@@ -120,6 +123,9 @@ export async function sendHeartbeat(
     osInfo: getOsInfo(),
     nodeVersion: process.version,
     uptime: Math.round((Date.now() - startTime) / 1000),
+    totalRamGb: getTotalRamGb(),
+    cpuCores: getCpuCores(),
+    cpuModel: getCpuModel(),
   };
 
   const url = `${config.apiUrl}/api/hosts/heartbeat`;

@@ -124,6 +124,36 @@ async function getDiskUsageWindows(): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
+// Total RAM (GB)
+// ---------------------------------------------------------------------------
+
+/**
+ * Total system RAM in GB (rounded to 1 decimal).
+ */
+export function getTotalRamGb(): number {
+  return Math.round((os.totalmem() / (1024 ** 3)) * 10) / 10;
+}
+
+// ---------------------------------------------------------------------------
+// CPU Core Count
+// ---------------------------------------------------------------------------
+
+/**
+ * Number of logical CPU cores.
+ */
+export function getCpuCores(): number {
+  return os.cpus().length;
+}
+
+/**
+ * CPU model string (e.g., "Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz").
+ */
+export function getCpuModel(): string {
+  const cpus = os.cpus();
+  return cpus.length > 0 ? cpus[0]!.model : "Unknown";
+}
+
+// ---------------------------------------------------------------------------
 // OS Info
 // ---------------------------------------------------------------------------
 

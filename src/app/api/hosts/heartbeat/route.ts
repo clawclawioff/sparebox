@@ -50,6 +50,10 @@ const heartbeatSchema = z.object({
   uptime: z.number().min(0).optional(),
   publicIp: z.string().max(45).optional(), // IPv4 or IPv6
   tailscaleIp: z.string().max(45).optional(),
+  // Hardware spec verification fields (reported by daemon)
+  totalRamGb: z.number().min(0).optional(),
+  cpuCores: z.number().int().min(1).optional(),
+  cpuModel: z.string().max(200).optional(),
 });
 
 // =============================================================================
@@ -155,6 +159,28 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date(),
     })
     .where(eq(hosts.id, keyRecord.hostId));
+
+  // 7b. Spec verification — runs once per host on first heartbeat with hw data
+  if (data.totalRamGb !== undefined && data.cpuCores !== undefined) {
+    // Check if already verified
+    const hostRecord = await db.query.hosts.findFirst({
+      where: eq(hosts.id, keyRecord.hostId),
+      columns: { specsVerified: true },
+    });
+
+    if (hostRecord && !hostRecord.specsVerified) {
+      await db
+        .update(hosts)
+        .set({
+          specsVerified: true,
+          verifiedCpuCores: data.cpuCores,
+          verifiedRamGb: Math.round(data.totalRamGb),
+          verifiedOsInfo: data.osInfo || null,
+          verifiedAt: new Date(),
+        })
+        .where(eq(hosts.id, keyRecord.hostId));
+    }
+  }
 
   // 8. Update key last_used_at
   await db

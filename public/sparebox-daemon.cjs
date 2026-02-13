@@ -23,12 +23,12 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// daemon/dist/index.js
+// dist/index.js
 var fs2 = __toESM(require("node:fs"), 1);
 var path2 = __toESM(require("node:path"), 1);
 var import_node_url2 = require("node:url");
 
-// daemon/dist/config.js
+// dist/config.js
 var fs = __toESM(require("node:fs"), 1);
 var path = __toESM(require("node:path"), 1);
 var os = __toESM(require("node:os"), 1);
@@ -76,7 +76,7 @@ function validateConfig(config) {
   return errors;
 }
 
-// daemon/dist/metrics.js
+// dist/metrics.js
 var os2 = __toESM(require("node:os"), 1);
 var import_node_child_process = require("node:child_process");
 function snapshotCpu() {
@@ -156,16 +156,26 @@ async function getDiskUsageWindows() {
     return -1;
   return Math.round((totalSize - freeSpace) / totalSize * 100);
 }
+function getTotalRamGb() {
+  return Math.round(os2.totalmem() / 1024 ** 3 * 10) / 10;
+}
+function getCpuCores() {
+  return os2.cpus().length;
+}
+function getCpuModel() {
+  const cpus2 = os2.cpus();
+  return cpus2.length > 0 ? cpus2[0].model : "Unknown";
+}
 function getOsInfo() {
   return `${os2.type()} ${os2.release()}`;
 }
 
-// daemon/dist/heartbeat.js
+// dist/heartbeat.js
 var https = __toESM(require("node:https"), 1);
 var http = __toESM(require("node:http"), 1);
 var import_node_url = require("node:url");
 
-// daemon/dist/log.js
+// dist/log.js
 function pad(n) {
   return n.toString().padStart(2, "0");
 }
@@ -184,7 +194,7 @@ function log(level, message) {
   }
 }
 
-// daemon/dist/heartbeat.js
+// dist/heartbeat.js
 var MIN_BACKOFF_MS = 1e3;
 var MAX_BACKOFF_MS = 3e5;
 var backoffMs = MIN_BACKOFF_MS;
@@ -243,7 +253,10 @@ async function sendHeartbeat(config, daemonVersion) {
     daemonVersion,
     osInfo: getOsInfo(),
     nodeVersion: process.version,
-    uptime: Math.round((Date.now() - startTime) / 1e3)
+    uptime: Math.round((Date.now() - startTime) / 1e3),
+    totalRamGb: getTotalRamGb(),
+    cpuCores: getCpuCores(),
+    cpuModel: getCpuModel()
   };
   const url = `${config.apiUrl}/api/hosts/heartbeat`;
   const body = JSON.stringify(payload);
@@ -323,7 +336,7 @@ function sleep2(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// daemon/dist/index.js
+// dist/index.js
 var import_meta = {};
 function getDaemonVersion() {
   try {

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Check, Copy, Loader2, Key, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, Loader2, Key, AlertTriangle, CheckCircle2, Cpu } from "lucide-react";
 
 export default function AddHostPage() {
   const router = useRouter();
@@ -26,6 +26,8 @@ export default function AddHostPage() {
   const [city, setCity] = useState("");
   const [pricePerMonth, setPricePerMonth] = useState(1000); // cents
 
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [detectNotice, setDetectNotice] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
 
@@ -46,6 +48,111 @@ export default function AddHostPage() {
       setDaemonConnected(true);
     }
   }, [hostData?.lastHeartbeat]);
+
+  // ---- Auto-detect specs ----
+  const RAM_OPTIONS = [4, 8, 16, 32, 64, 128, 256];
+
+  function snapToNearestRam(gb: number): number {
+    let closest = RAM_OPTIONS[0]!;
+    let minDiff = Math.abs(gb - closest);
+    for (const opt of RAM_OPTIONS) {
+      const diff = Math.abs(gb - opt);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = opt;
+      }
+    }
+    return closest;
+  }
+
+  function detectOS(): string {
+    const ua = navigator.userAgent;
+    // macOS
+    const macMatch = ua.match(/Mac OS X ([\d_.]+)/);
+    if (macMatch) {
+      const ver = macMatch[1]!.replace(/_/g, ".");
+      const major = parseInt(ver.split(".")[0]!, 10);
+      return `macOS ${major >= 20 ? ver : ver}`;
+    }
+    // Windows
+    if (ua.includes("Windows NT 10.0")) {
+      // Windows 11 reports as NT 10.0 but with specific build numbers
+      const buildMatch = ua.match(/Windows NT 10\.0.*?(\d{5,})/);
+      if (buildMatch && parseInt(buildMatch[1]!, 10) >= 22000) {
+        return "Windows 11";
+      }
+      return "Windows 10";
+    }
+    const winMatch = ua.match(/Windows NT ([\d.]+)/);
+    if (winMatch) return `Windows NT ${winMatch[1]}`;
+    // Linux
+    if (ua.includes("Linux")) {
+      const distro = ua.match(/(Ubuntu|Fedora|Debian|Arch|CentOS)/i);
+      return distro ? `Linux (${distro[1]})` : "Linux";
+    }
+    // ChromeOS
+    if (ua.includes("CrOS")) return "ChromeOS";
+    return "";
+  }
+
+  async function handleAutoDetect() {
+    setIsDetecting(true);
+    setDetectNotice("");
+    const notices: string[] = [];
+
+    try {
+      // CPU cores
+      if (navigator.hardwareConcurrency) {
+        const cores = navigator.hardwareConcurrency;
+        // Snap to nearest option in the CPU select
+        const cpuOptions = [1, 2, 4, 6, 8, 12, 16, 24, 32, 64];
+        let bestCpu = cpuOptions[0]!;
+        let bestDiff = Math.abs(cores - bestCpu);
+        for (const opt of cpuOptions) {
+          const diff = Math.abs(cores - opt);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestCpu = opt;
+          }
+        }
+        setCpuCores(bestCpu);
+      }
+
+      // RAM (Chrome only)
+      const deviceMemory = (navigator as unknown as { deviceMemory?: number }).deviceMemory;
+      if (deviceMemory) {
+        setRamGb(snapToNearestRam(deviceMemory));
+      } else {
+        notices.push("RAM detection not supported in this browser");
+      }
+
+      // OS
+      const os = detectOS();
+      if (os) setOsInfo(os);
+
+      // Location via IP geolocation
+      try {
+        const res = await fetch("https://ipapi.co/json/");
+        if (res.ok) {
+          const geo = await res.json();
+          if (geo.country_code) setCountry(geo.country_code);
+          if (geo.region) setRegion(geo.region);
+          if (geo.city) setCity(geo.city);
+        }
+      } catch {
+        notices.push("Location detection failed");
+      }
+
+      const noticeStr = notices.length > 0
+        ? `✓ Specs detected — review and adjust if needed (${notices.join("; ")})`
+        : "✓ Specs detected — review and adjust if needed";
+      setDetectNotice(noticeStr);
+    } catch {
+      setDetectNotice("⚠ Auto-detection failed — please fill in manually");
+    } finally {
+      setIsDetecting(false);
+    }
+  }
 
   const canProceedStep1 = name.trim().length >= 1 && cpuCores > 0 && ramGb >= 4;
   const canProceedStep2 = pricePerMonth >= 500;
@@ -141,9 +248,38 @@ export default function AddHostPage() {
           <h2 className="text-lg font-semibold text-foreground mb-1">
             Step 1: Machine Details
           </h2>
-          <p className="text-sm text-muted-foreground mb-6">
+          <p className="text-sm text-muted-foreground mb-4">
             Tell us about your hardware
           </p>
+
+          {/* Auto-detect button */}
+          <button
+            onClick={handleAutoDetect}
+            disabled={isDetecting}
+            className="inline-flex items-center gap-2 px-4 py-2 mb-4 bg-primary/10 hover:bg-primary/20 text-primary font-medium rounded-lg transition-colors border border-primary/20 disabled:opacity-50"
+          >
+            {isDetecting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Detecting...
+              </>
+            ) : (
+              <>
+                <Cpu className="w-4 h-4" />
+                Auto-detect specs
+              </>
+            )}
+          </button>
+
+          {detectNotice && (
+            <div className={`rounded-lg p-3 mb-4 text-sm ${
+              detectNotice.startsWith("✓")
+                ? "bg-green-500/10 text-green-700 border border-green-500/20"
+                : "bg-yellow-500/10 text-yellow-700 border border-yellow-500/20"
+            }`}>
+              {detectNotice}
+            </div>
+          )}
 
           <div className="space-y-4">
             <div>

@@ -122,6 +122,13 @@ export const hosts = pgTable("hosts", {
   // Pricing (cents per month)
   pricePerMonth: integer("price_per_month").notNull().default(1000),
 
+  // Spec verification (from daemon heartbeat)
+  specsVerified: boolean("specs_verified").default(false),
+  verifiedCpuCores: integer("verified_cpu_cores"),
+  verifiedRamGb: integer("verified_ram_gb"),
+  verifiedOsInfo: text("verified_os_info"),
+  verifiedAt: timestamp("verified_at"),
+
   // Networking
   tailscaleIp: text("tailscale_ip"),
   publicIp: text("public_ip"),

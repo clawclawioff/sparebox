@@ -25,6 +25,7 @@ import {
   Workflow,
   RefreshCw,
   X,
+  ShieldCheck,
 } from "lucide-react";
 
 function StatusBadge({ status }: { status: string }) {
@@ -174,6 +175,45 @@ function AgentStatusBadge({ status }: { status: string }) {
         }`}
       />
       {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+}
+
+function SpecValue({
+  label,
+  reportedValue,
+  verifiedValue,
+  unit,
+  specsVerified,
+}: {
+  label: string;
+  reportedValue: number | string | null | undefined;
+  verifiedValue: number | string | null | undefined;
+  unit: string;
+  specsVerified: boolean;
+}) {
+  if (!specsVerified || verifiedValue == null) {
+    return <span>{reportedValue ?? "—"}{unit}</span>;
+  }
+
+  const reported = String(reportedValue);
+  const verified = String(verifiedValue);
+  const match = reported === verified;
+
+  return (
+    <span className="inline-flex items-center gap-1.5 flex-wrap">
+      <span>{reportedValue}{unit}</span>
+      {match ? (
+        <span className="inline-flex items-center gap-0.5 text-green-600 text-xs font-medium">
+          <Check className="w-3 h-3" />
+          verified
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-0.5 text-yellow-600 text-xs font-medium">
+          <AlertTriangle className="w-3 h-3" />
+          verified: {verifiedValue}{unit}
+        </span>
+      )}
     </span>
   );
 }
@@ -534,22 +574,55 @@ export default function HostDetailsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Machine Info */}
         <div className="bg-card border border-border rounded-xl p-6">
-          <h3 className="font-semibold text-foreground mb-4">Machine Info</h3>
+          <div className="flex items-center gap-2 mb-4">
+            <h3 className="font-semibold text-foreground">Machine Info</h3>
+            {(host as any).specsVerified && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-600 border border-green-500/20">
+                <ShieldCheck className="w-3 h-3" />
+                Verified
+              </span>
+            )}
+          </div>
           <div className="space-y-4 text-sm">
             <div className="flex items-start gap-3">
               <Cpu className="w-4 h-4 text-muted-foreground mt-0.5" />
               <div>
-                <span className="text-muted-foreground">Specs</span>
+                <span className="text-muted-foreground">CPU</span>
                 <p className="text-foreground">
-                  {host.cpuCores || "—"} cores • {host.ramGb || "—"}GB RAM • {host.storageGb || "—"}GB Storage
+                  <SpecValue
+                    label="CPU"
+                    reportedValue={host.cpuCores}
+                    verifiedValue={(host as any).verifiedCpuCores}
+                    unit=" cores"
+                    specsVerified={(host as any).specsVerified ?? false}
+                  />
                 </p>
+                <span className="text-muted-foreground">RAM</span>
+                <p className="text-foreground">
+                  <SpecValue
+                    label="RAM"
+                    reportedValue={host.ramGb}
+                    verifiedValue={(host as any).verifiedRamGb}
+                    unit=" GB"
+                    specsVerified={(host as any).specsVerified ?? false}
+                  />
+                </p>
+                <span className="text-muted-foreground">Storage</span>
+                <p className="text-foreground">{host.storageGb || "—"} GB</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Server className="w-4 h-4 text-muted-foreground mt-0.5" />
               <div>
                 <span className="text-muted-foreground">Operating System</span>
-                <p className="text-foreground">{host.osInfo || "Not specified"}</p>
+                <p className="text-foreground">
+                  {host.osInfo || "Not specified"}
+                  {(host as any).specsVerified && (host as any).verifiedOsInfo && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      (daemon: {(host as any).verifiedOsInfo})
+                    </span>
+                  )}
+                </p>
               </div>
             </div>
             {(host as any).daemonVersion && (

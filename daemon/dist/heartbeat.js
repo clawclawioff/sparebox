@@ -2,7 +2,7 @@ import * as https from "node:https";
 import * as http from "node:http";
 import { URL } from "node:url";
 import { log } from "./log.js";
-import { getCpuUsage, getRamUsage, getDiskUsage, getOsInfo } from "./metrics.js";
+import { getCpuUsage, getRamUsage, getDiskUsage, getOsInfo, getTotalRamGb, getCpuCores, getCpuModel } from "./metrics.js";
 // ---------------------------------------------------------------------------
 // Backoff state
 // ---------------------------------------------------------------------------
@@ -72,6 +72,9 @@ export async function sendHeartbeat(config, daemonVersion) {
         osInfo: getOsInfo(),
         nodeVersion: process.version,
         uptime: Math.round((Date.now() - startTime) / 1000),
+        totalRamGb: getTotalRamGb(),
+        cpuCores: getCpuCores(),
+        cpuModel: getCpuModel(),
     };
     const url = `${config.apiUrl}/api/hosts/heartbeat`;
     const body = JSON.stringify(payload);
