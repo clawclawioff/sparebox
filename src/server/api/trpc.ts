@@ -13,6 +13,8 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import { db } from "@/db";
 import { auth } from "@/server/auth";
 import type { Session, User } from "better-auth";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
 
 // =============================================================================
 // Types
@@ -100,7 +102,26 @@ const loggerMiddleware = middleware(async ({ path, type, next }) => {
 });
 
 /**
- * Auth middleware - ensures user is authenticated
+ * tRPC rate limiter — 30 requests per minute per user
+ */
+let _trpcRatelimit: Ratelimit | null = null;
+function getTrpcRatelimit(): Ratelimit | null {
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    return null;
+  }
+  if (!_trpcRatelimit) {
+    _trpcRatelimit = new Ratelimit({
+      redis: Redis.fromEnv(),
+      limiter: Ratelimit.slidingWindow(30, "60 s"),
+      analytics: false,
+      prefix: "ratelimit:trpc",
+    });
+  }
+  return _trpcRatelimit;
+}
+
+/**
+ * Auth middleware - ensures user is authenticated + rate limited
  * Narrows context type to guarantee session/user exist
  */
 const enforceAuth = middleware(async ({ ctx, next }) => {
@@ -109,6 +130,18 @@ const enforceAuth = middleware(async ({ ctx, next }) => {
       code: "UNAUTHORIZED",
       message: "You must be logged in to perform this action",
     });
+  }
+
+  // Rate limit per user (30 req/min)
+  const rl = getTrpcRatelimit();
+  if (rl) {
+    const { success } = await rl.limit(ctx.user.id);
+    if (!success) {
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: "Too many requests. Please slow down.",
+      });
+    }
   }
   
   return next({

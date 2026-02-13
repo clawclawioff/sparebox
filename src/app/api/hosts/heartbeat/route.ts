@@ -3,7 +3,7 @@ import { createHash } from "crypto";
 import { z } from "zod";
 import { db } from "@/db";
 import { hostApiKeys, hostHeartbeats, hosts } from "@/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, inArray } from "drizzle-orm";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import {
@@ -148,18 +148,28 @@ export async function POST(req: NextRequest) {
     agentCount: data.agentCount,
   });
 
-  // 7. Update host record (re-activate if inactive)
+  // 7. Update host record (always update telemetry, but don't override suspended status)
   await db
     .update(hosts)
     .set({
       lastHeartbeat: new Date(),
-      status: "active",
       daemonVersion: data.daemonVersion,
       nodeVersion: data.nodeVersion || null,
       publicIp: data.publicIp || null,
       updatedAt: new Date(),
     })
     .where(eq(hosts.id, keyRecord.hostId));
+
+  // Only change status to active if currently inactive or pending (not suspended)
+  await db
+    .update(hosts)
+    .set({ status: "active" })
+    .where(
+      and(
+        eq(hosts.id, keyRecord.hostId),
+        inArray(hosts.status, ["inactive", "pending"])
+      )
+    );
 
   // 7b. Spec verification — runs once per host on first heartbeat with hw data
   if (data.totalRamGb !== undefined && data.cpuCores !== undefined) {

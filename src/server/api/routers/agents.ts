@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { agents, hosts, subscriptions } from "@/db";
 import { eq, and } from "drizzle-orm";
 import { PLATFORM_FEE_PERCENT } from "@/lib/constants";
+import Stripe from "stripe";
 
 export const agentsRouter = router({
   // List agents for the current user
@@ -65,6 +66,18 @@ export const agentsRouter = router({
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Host not available",
+        });
+      }
+
+      // Check for duplicate agent name per user
+      const existingAgent = await ctx.db.query.agents.findFirst({
+        where: and(eq(agents.userId, ctx.user.id), eq(agents.name, input.name)),
+      });
+
+      if (existingAgent) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "You already have an agent with this name. Please choose a different name.",
         });
       }
 
@@ -206,6 +219,27 @@ export const agentsRouter = router({
       }
 
       // TODO: Stop agent on host first
+
+      // Cancel active Stripe subscriptions before deleting DB records
+      const agentSubs = await ctx.db.query.subscriptions.findMany({
+        where: and(
+          eq(subscriptions.agentId, input.id),
+          eq(subscriptions.status, "active")
+        ),
+      });
+
+      if (agentSubs.length > 0) {
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+        for (const sub of agentSubs) {
+          if (sub.stripeSubscriptionId) {
+            try {
+              await stripe.subscriptions.cancel(sub.stripeSubscriptionId);
+            } catch (e) {
+              console.error(`Failed to cancel Stripe sub ${sub.stripeSubscriptionId}:`, e);
+            }
+          }
+        }
+      }
 
       // Delete subscriptions
       await ctx.db

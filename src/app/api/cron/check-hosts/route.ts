@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { db } from "@/db";
 import { hosts } from "@/db/schema";
 import { eq, and, lt, gte, isNotNull } from "drizzle-orm";
@@ -8,15 +9,25 @@ import {
 } from "@/lib/constants";
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+function safeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
+// =============================================================================
 // GET /api/cron/check-hosts
 // Vercel Cron Job — runs every 5 minutes
 // Marks hosts as inactive when heartbeats are stale
 // =============================================================================
 
 export async function GET(req: NextRequest) {
-  // Verify Vercel cron secret
+  // Verify Vercel cron secret (timing-safe comparison)
   const authHeader = req.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const expected = `Bearer ${process.env.CRON_SECRET}`;
+  if (!authHeader || !safeCompare(authHeader, expected)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

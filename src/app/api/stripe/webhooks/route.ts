@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { db } from "@/db";
 import { agents, subscriptions, hosts, user } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import type Stripe from "stripe";
 import { PLATFORM_FEE_PERCENT } from "@/lib/constants";
 
@@ -180,10 +180,24 @@ async function handleCheckoutCompleted(session: any) {
       }
     }
 
+    // Check for duplicate agent name per user (unique index: idx_agents_user_name)
+    const existingAgent = await tx.query.agents.findFirst({
+      where: and(eq(agents.userId, userId), eq(agents.name, agentName)),
+    });
+    if (existingAgent) {
+      console.error(
+        `[Stripe Webhook] Duplicate agent name "${agentName}" for user ${userId}. Appending subscription ID.`
+      );
+    }
+
+    const finalAgentName = existingAgent
+      ? `${agentName}-${stripeSubscriptionId?.slice(-6) || Date.now()}`
+      : agentName;
+
     const [agent] = await tx
       .insert(agents)
       .values({
-        name: agentName,
+        name: finalAgentName,
         userId: userId,
         hostId: hostId,
         config: config || null,

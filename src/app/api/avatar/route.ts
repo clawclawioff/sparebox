@@ -5,6 +5,25 @@ import { db } from "@/db";
 import { user } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { createClient } from "@supabase/supabase-js";
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
+
+// Rate limit: 10 per hour per user
+let _avatarRatelimit: Ratelimit | null = null;
+function getAvatarRatelimit(): Ratelimit | null {
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    return null;
+  }
+  if (!_avatarRatelimit) {
+    _avatarRatelimit = new Ratelimit({
+      redis: Redis.fromEnv(),
+      limiter: Ratelimit.slidingWindow(10, "3600 s"),
+      analytics: false,
+      prefix: "ratelimit:avatar",
+    });
+  }
+  return _avatarRatelimit;
+}
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -17,6 +36,15 @@ export async function POST(request: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate limit by user ID
+  const rl = getAvatarRatelimit();
+  if (rl) {
+    const { success } = await rl.limit(session.user.id);
+    if (!success) {
+      return NextResponse.json({ error: "Too many uploads. Try again later." }, { status: 429 });
+    }
   }
 
   const formData = await request.formData();
