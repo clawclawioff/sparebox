@@ -75,6 +75,21 @@ export async function POST(request: NextRequest) {
 
     // Upload new avatar
     const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Validate magic bytes to prevent disguised file uploads
+    const isJpeg = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
+    const isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
+    const isGif = buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38;
+    const isWebp = buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46
+      && buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50;
+
+    if (!isJpeg && !isPng && !isGif && !isWebp) {
+      return NextResponse.json(
+        { error: "Invalid image content. File does not match a supported image format." },
+        { status: 400 }
+      );
+    }
+
     const { error: uploadError } = await supabase.storage
       .from("avatars")
       .upload(fileName, buffer, {

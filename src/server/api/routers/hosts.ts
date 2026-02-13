@@ -27,7 +27,7 @@ export const hostsRouter = router({
       });
 
       if (!host || host.userId !== ctx.user.id) {
-        throw new Error("Host not found");
+        throw new TRPCError({ code: "NOT_FOUND", message: "Host not found" });
       }
 
       // Lazy staleness check
@@ -39,8 +39,7 @@ export const hostsRouter = router({
         ctx.db.update(hosts)
           .set({ status: "inactive", updatedAt: new Date() })
           .where(eq(hosts.id, host.id))
-          .then(() => {})
-          .catch(() => {});
+          .catch((err: unknown) => console.error("[staleness] Failed to mark host inactive:", err));
         host.status = "inactive";
       }
 
@@ -77,7 +76,7 @@ export const hostsRouter = router({
     }),
 
   // Update a host
-  update: protectedProcedure
+  update: hostProcedure
     .input(
       z.object({
         id: z.string().uuid(),
@@ -96,7 +95,7 @@ export const hostsRouter = router({
       });
 
       if (!existing || existing.userId !== ctx.user.id) {
-        throw new Error("Host not found");
+        throw new TRPCError({ code: "NOT_FOUND", message: "Host not found" });
       }
 
       const [updated] = await ctx.db
@@ -195,8 +194,7 @@ export const hostsRouter = router({
           ctx.db.update(hosts)
             .set({ status: "inactive", updatedAt: new Date() })
             .where(eq(hosts.id, host.id))
-            .then(() => {})
-            .catch(() => {});
+            .catch((err: unknown) => console.error("[staleness] Failed to mark host inactive:", err));
           // Update the in-memory result too
           host.status = "inactive";
         }
@@ -216,7 +214,7 @@ export const hostsRouter = router({
       });
 
       if (!host || host.userId !== ctx.user.id) {
-        throw new Error("Host not found");
+        throw new TRPCError({ code: "NOT_FOUND", message: "Host not found" });
       }
 
       // Get hosted agent count
@@ -265,7 +263,7 @@ export const hostsRouter = router({
       });
 
       if (!host || host.userId !== ctx.user.id) {
-        throw new Error("Host not found");
+        throw new TRPCError({ code: "NOT_FOUND", message: "Host not found" });
       }
 
       // Get latest heartbeat

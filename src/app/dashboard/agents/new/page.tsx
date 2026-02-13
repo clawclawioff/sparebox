@@ -266,7 +266,7 @@ export default function DeployAgentPage() {
 
           <p className="text-xs text-muted-foreground mb-6">
             By deploying, you agree to our{" "}
-            <Link href="/terms" className="text-primary hover:underline">
+            <Link href="/terms-of-service" className="text-primary hover:underline">
               Terms of Service
             </Link>
           </p>

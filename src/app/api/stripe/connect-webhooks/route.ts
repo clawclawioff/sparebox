@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  console.log(
+  console.info(
     `[Stripe Connect Webhook] Received event: ${event.type} (${event.id})` +
       (event.account ? ` for account ${event.account}` : "")
   );
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
 
       case "payout.paid": {
         const payout = event.data.object as any;
-        console.log(
+        console.info(
           `[Stripe Connect Webhook] Payout paid: ${payout.id} ($${(payout.amount / 100).toFixed(2)}) for account ${event.account}`
         );
         break;
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
       }
 
       default:
-        console.log(
+        console.info(
           `[Stripe Connect Webhook] Unhandled event type: ${event.type}`
         );
     }
@@ -92,9 +92,10 @@ export async function POST(req: NextRequest) {
       message,
       err instanceof Error ? err.stack : ""
     );
+    // Return 500 so Stripe retries the event
     return NextResponse.json(
       { received: true, error: message },
-      { status: 200 }
+      { status: 500 }
     );
   }
 
@@ -107,16 +108,16 @@ export async function POST(req: NextRequest) {
 
 async function handleAccountUpdated(account: any, connectedAccountId?: string) {
   const accountId = connectedAccountId || account.id;
-  console.log(
+  console.info(
     `[Stripe Connect Webhook] Account updated: ${accountId}`
   );
-  console.log(
+  console.info(
     `[Stripe Connect Webhook]   charges_enabled: ${account.charges_enabled}`
   );
-  console.log(
+  console.info(
     `[Stripe Connect Webhook]   payouts_enabled: ${account.payouts_enabled}`
   );
-  console.log(
+  console.info(
     `[Stripe Connect Webhook]   details_submitted: ${account.details_submitted}`
   );
 
@@ -126,19 +127,19 @@ async function handleAccountUpdated(account: any, connectedAccountId?: string) {
   });
 
   if (hostUser) {
-    console.log(
+    console.info(
       `[Stripe Connect Webhook] Account ${accountId} belongs to user ${hostUser.id} (${hostUser.email})`
     );
 
     // If onboarding just completed (payouts now enabled), log it
     if (account.payouts_enabled && account.charges_enabled) {
-      console.log(
+      console.info(
         `[Stripe Connect Webhook] Host ${hostUser.email} onboarding complete — payouts enabled!`
       );
       // TODO: Send congratulations email to host
     }
   } else {
-    console.log(
+    console.info(
       `[Stripe Connect Webhook] No user found for Connect account ${accountId}`
     );
   }

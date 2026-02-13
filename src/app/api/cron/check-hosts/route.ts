@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { db } from "@/db";
-import { hosts } from "@/db/schema";
+import { hosts, hostHeartbeats } from "@/db/schema";
 import { eq, and, lt, gte, isNotNull } from "drizzle-orm";
 import {
   HEARTBEAT_STALE_THRESHOLD_MS,
@@ -67,18 +67,22 @@ export async function GET(req: NextRequest) {
 
   // 3. Log results
   if (staleHosts.length > 0) {
-    console.log(
+    console.info(
       `[Cron] Marked ${staleHosts.length} host(s) as inactive:`,
       staleHosts.map((h) => h.name).join(", ")
     );
   }
 
   if (recoveredHosts.length > 0) {
-    console.log(
+    console.info(
       `[Cron] Re-activated ${recoveredHosts.length} host(s):`,
       recoveredHosts.map((h) => h.name).join(", ")
     );
   }
+
+  // 4. Clean up old heartbeat records (older than 30 days)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  await db.delete(hostHeartbeats).where(lt(hostHeartbeats.createdAt, thirtyDaysAgo));
 
   return NextResponse.json({
     ok: true,

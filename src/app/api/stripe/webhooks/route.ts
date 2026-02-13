@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  console.log(`[Stripe Webhook] Received event: ${event.type} (${event.id})`);
+  console.info(`[Stripe Webhook] Received event: ${event.type} (${event.id})`);
 
   try {
     switch (event.type) {
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
 
       case "customer.subscription.created": {
         // Backup handler — checkout.session.completed is primary
-        console.log(
+        console.info(
           `[Stripe Webhook] Subscription created: ${(event.data.object as any).id}`
         );
         break;
@@ -80,14 +80,14 @@ export async function POST(req: NextRequest) {
       }
 
       case "invoice.paid": {
-        console.log(
+        console.info(
           `[Stripe Webhook] Invoice paid: ${(event.data.object as any).id}`
         );
         break;
       }
 
       default:
-        console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
+        console.info(`[Stripe Webhook] Unhandled event type: ${event.type}`);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -96,9 +96,8 @@ export async function POST(req: NextRequest) {
       message,
       err instanceof Error ? err.stack : ""
     );
-    // Return 200 to prevent Stripe from retrying and potentially disabling the endpoint
-    // The error is logged for debugging
-    return NextResponse.json({ received: true, error: message }, { status: 200 });
+    // Return 500 so Stripe retries the event
+    return NextResponse.json({ received: true, error: message }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });
@@ -109,20 +108,20 @@ export async function POST(req: NextRequest) {
 // =============================================================================
 
 async function handleCheckoutCompleted(session: any) {
-  console.log(`[Stripe Webhook] Checkout completed: ${session.id}`);
-  console.log(`[Stripe Webhook]   Mode: ${session.mode}`);
-  console.log(`[Stripe Webhook]   Payment status: ${session.payment_status}`);
-  console.log(`[Stripe Webhook]   Metadata:`, JSON.stringify(session.metadata));
+  console.info(`[Stripe Webhook] Checkout completed: ${session.id}`);
+  console.info(`[Stripe Webhook]   Mode: ${session.mode}`);
+  console.info(`[Stripe Webhook]   Payment status: ${session.payment_status}`);
+  console.info(`[Stripe Webhook]   Metadata:`, JSON.stringify(session.metadata));
 
   // Only handle subscription checkouts
   if (session.mode !== "subscription") {
-    console.log("[Stripe Webhook] Skipping non-subscription checkout");
+    console.info("[Stripe Webhook] Skipping non-subscription checkout");
     return;
   }
 
   // Verify payment was successful
   if (session.payment_status !== "paid") {
-    console.log(
+    console.info(
       `[Stripe Webhook] Payment not complete (status: ${session.payment_status}), skipping`
     );
     return;
@@ -146,7 +145,7 @@ async function handleCheckoutCompleted(session: any) {
       where: eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId),
     });
     if (existingSub) {
-      console.log(
+      console.info(
         `[Stripe Webhook] Subscription ${stripeSubscriptionId} already exists, skipping (idempotent)`
       );
       return;
@@ -163,7 +162,7 @@ async function handleCheckoutCompleted(session: any) {
     return;
   }
 
-  console.log(
+  console.info(
     `[Stripe Webhook] Creating agent "${agentName}" for user ${userId} on host ${host.name}`
   );
 
@@ -175,7 +174,7 @@ async function handleCheckoutCompleted(session: any) {
         where: eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId),
       });
       if (existingSub) {
-        console.log(`[Stripe Webhook] Subscription ${stripeSubscriptionId} already exists (race condition caught)`);
+        console.info(`[Stripe Webhook] Subscription ${stripeSubscriptionId} already exists (race condition caught)`);
         return;
       }
     }
@@ -219,7 +218,7 @@ async function handleCheckoutCompleted(session: any) {
       status: "active",
     });
 
-    console.log(`[Stripe Webhook] Agent ${agent.id} + subscription created in transaction`);
+    console.info(`[Stripe Webhook] Agent ${agent.id} + subscription created in transaction`);
   });
 
   // Update user's stripeCustomerId if not set
@@ -232,14 +231,14 @@ async function handleCheckoutCompleted(session: any) {
       .update(user)
       .set({ stripeCustomerId })
       .where(eq(user.id, userId));
-    console.log(
+    console.info(
       `[Stripe Webhook] Updated user ${userId} with customer ${stripeCustomerId}`
     );
   }
 }
 
 async function handleSubscriptionDeleted(subscription: any) {
-  console.log(`[Stripe Webhook] Subscription deleted: ${subscription.id}`);
+  console.info(`[Stripe Webhook] Subscription deleted: ${subscription.id}`);
 
   const [sub] = await db
     .update(subscriptions)
@@ -254,14 +253,14 @@ async function handleSubscriptionDeleted(subscription: any) {
       .set({ status: "stopped", updatedAt: new Date() })
       .where(eq(agents.id, sub.agentId));
     
-    console.log(`[Stripe Webhook] Stopped agent ${sub.agentId} (subscription canceled)`);
+    console.info(`[Stripe Webhook] Stopped agent ${sub.agentId} (subscription canceled)`);
   } else {
-    console.log(`[Stripe Webhook] No matching subscription found for ${subscription.id}`);
+    console.info(`[Stripe Webhook] No matching subscription found for ${subscription.id}`);
   }
 }
 
 async function handleSubscriptionUpdated(subscription: any) {
-  console.log(
+  console.info(
     `[Stripe Webhook] Subscription updated: ${subscription.id} (status: ${subscription.status})`
   );
 
@@ -299,17 +298,17 @@ async function handleSubscriptionUpdated(subscription: any) {
     .returning();
 
   if (result.length === 0) {
-    console.log(
+    console.info(
       `[Stripe Webhook] No matching subscription found for ${subscription.id}`
     );
   }
 }
 
 async function handlePaymentFailed(invoice: any) {
-  console.log(`[Stripe Webhook] Payment failed for invoice: ${invoice.id}`);
+  console.info(`[Stripe Webhook] Payment failed for invoice: ${invoice.id}`);
 
   if (!invoice.subscription) {
-    console.log("[Stripe Webhook] Invoice has no subscription, skipping");
+    console.info("[Stripe Webhook] Invoice has no subscription, skipping");
     return;
   }
 
@@ -326,7 +325,7 @@ async function handlePaymentFailed(invoice: any) {
     .returning();
 
   if (sub) {
-    console.log(
+    console.info(
       `[Stripe Webhook] Marked subscription ${sub.id} as past_due (agent ${sub.agentId} still running - manual intervention may be required)`
     );
   }
