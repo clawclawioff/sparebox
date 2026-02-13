@@ -5,6 +5,7 @@ import { agents, subscriptions, hosts, user } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import type Stripe from "stripe";
 import { PLATFORM_FEE_PERCENT } from "@/lib/constants";
+import { sendDeploySuccessEmail, sendPaymentFailedEmail } from "@/lib/email/notifications";
 
 export async function POST(req: NextRequest) {
   let body: string;
@@ -167,6 +168,9 @@ async function handleCheckoutCompleted(session: any) {
   );
 
   // Wrap agent + subscription creation in a transaction
+  let createdAgentId: string | null = null;
+  let finalAgentName: string = agentName;
+
   await db.transaction(async (tx) => {
     // Double-check idempotency inside transaction (race condition guard)
     if (stripeSubscriptionId) {
@@ -189,7 +193,7 @@ async function handleCheckoutCompleted(session: any) {
       );
     }
 
-    const finalAgentName = existingAgent
+    finalAgentName = existingAgent
       ? `${agentName}-${stripeSubscriptionId?.slice(-6) || Date.now()}`
       : agentName;
 
@@ -218,8 +222,26 @@ async function handleCheckoutCompleted(session: any) {
       status: "active",
     });
 
+    createdAgentId = agent.id;
     console.info(`[Stripe Webhook] Agent ${agent.id} + subscription created in transaction`);
   });
+
+  // Send deploy success email (fire-and-forget)
+  if (createdAgentId) {
+    const deployer = await db.query.user.findFirst({
+      where: eq(user.id, userId),
+      columns: { email: true },
+    });
+    if (deployer?.email) {
+      sendDeploySuccessEmail(deployer.email, {
+        agentName: finalAgentName,
+        hostName: host.name,
+        hostRegion: host.region || host.city || host.country || "Unknown",
+        price: host.pricePerMonth,
+        agentId: createdAgentId,
+      }).catch((err) => console.error("[email] Failed to send deploy success email:", err));
+    }
+  }
 
   // Update user's stripeCustomerId if not set
   const stripeCustomerId = typeof session.customer === "string"
@@ -328,5 +350,35 @@ async function handlePaymentFailed(invoice: any) {
     console.info(
       `[Stripe Webhook] Marked subscription ${sub.id} as past_due (agent ${sub.agentId} still running - manual intervention may be required)`
     );
+
+    // Send payment failed email (fire-and-forget)
+    (async () => {
+      try {
+        const [agent, subscriber] = await Promise.all([
+          db.query.agents.findFirst({
+            where: eq(agents.id, sub.agentId),
+            columns: { name: true },
+          }),
+          db.query.user.findFirst({
+            where: eq(user.id, sub.userId),
+            columns: { email: true },
+          }),
+        ]);
+
+        if (subscriber?.email) {
+          const nextRetryDate = invoice.next_payment_attempt
+            ? new Date(invoice.next_payment_attempt * 1000)
+            : null;
+
+          await sendPaymentFailedEmail(subscriber.email, {
+            agentName: agent?.name || "Unknown Agent",
+            nextRetryDate,
+            hostedInvoiceUrl: invoice.hosted_invoice_url || "https://www.sparebox.dev/dashboard/billing",
+          });
+        }
+      } catch (err) {
+        console.error("[email] Failed to send payment failed email:", err);
+      }
+    })();
   }
 }

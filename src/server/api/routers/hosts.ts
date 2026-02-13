@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { randomBytes, createHash } from "crypto";
 import { router, protectedProcedure, hostProcedure } from "../trpc";
-import { hosts, hostHeartbeats, hostApiKeys, agents, subscriptions } from "@/db";
+import { hosts, hostHeartbeats, hostApiKeys, agents, subscriptions, user } from "@/db";
 import { eq, desc, and, gte, sql, not, isNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { API_KEY_PREFIX, API_KEY_ENTROPY_BYTES, HEARTBEAT_STALE_THRESHOLD_MS } from "@/lib/constants";
+import { sendHostOfflineEmail } from "@/lib/email/notifications";
 
 export const hostsRouter = router({
   // List hosts for the current user
@@ -36,9 +37,31 @@ export const hostsRouter = router({
         host.lastHeartbeat &&
         Date.now() - new Date(host.lastHeartbeat).getTime() > HEARTBEAT_STALE_THRESHOLD_MS
       ) {
+        // Only update rows that are still active (avoids duplicate transitions)
         ctx.db.update(hosts)
           .set({ status: "inactive", updatedAt: new Date() })
-          .where(eq(hosts.id, host.id))
+          .where(and(eq(hosts.id, host.id), eq(hosts.status, "active")))
+          .returning({ id: hosts.id, name: hosts.name, userId: hosts.userId, lastHeartbeat: hosts.lastHeartbeat })
+          .then(async (rows) => {
+            if (rows.length > 0 && rows[0]) {
+              // Transition happened — send offline email
+              try {
+                const owner = await ctx.db.query.user.findFirst({
+                  where: eq(user.id, rows[0].userId),
+                  columns: { email: true },
+                });
+                if (owner?.email) {
+                  await sendHostOfflineEmail(owner.email, {
+                    hostName: rows[0].name,
+                    lastSeen: rows[0].lastHeartbeat || new Date(),
+                    hostId: rows[0].id,
+                  });
+                }
+              } catch (emailErr) {
+                console.error("[email] Failed to send host offline email:", emailErr);
+              }
+            }
+          })
           .catch((err: unknown) => console.error("[staleness] Failed to mark host inactive:", err));
         host.status = "inactive";
       }
@@ -190,10 +213,30 @@ export const hostsRouter = router({
           host.lastHeartbeat &&
           now - new Date(host.lastHeartbeat).getTime() > HEARTBEAT_STALE_THRESHOLD_MS
         ) {
-          // Fire-and-forget: mark as inactive
+          // Fire-and-forget: mark as inactive (only if still active to avoid duplicate transitions)
           ctx.db.update(hosts)
             .set({ status: "inactive", updatedAt: new Date() })
-            .where(eq(hosts.id, host.id))
+            .where(and(eq(hosts.id, host.id), eq(hosts.status, "active")))
+            .returning({ id: hosts.id, name: hosts.name, userId: hosts.userId, lastHeartbeat: hosts.lastHeartbeat })
+            .then(async (rows) => {
+              if (rows.length > 0 && rows[0]) {
+                try {
+                  const owner = await ctx.db.query.user.findFirst({
+                    where: eq(user.id, rows[0].userId),
+                    columns: { email: true },
+                  });
+                  if (owner?.email) {
+                    await sendHostOfflineEmail(owner.email, {
+                      hostName: rows[0].name,
+                      lastSeen: rows[0].lastHeartbeat || new Date(),
+                      hostId: rows[0].id,
+                    });
+                  }
+                } catch (emailErr) {
+                  console.error("[email] Failed to send host offline email:", emailErr);
+                }
+              }
+            })
             .catch((err: unknown) => console.error("[staleness] Failed to mark host inactive:", err));
           // Update the in-memory result too
           host.status = "inactive";

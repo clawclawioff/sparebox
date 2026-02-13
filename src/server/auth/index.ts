@@ -5,6 +5,7 @@ import { Resend } from "resend";
 import { render } from "@react-email/render";
 import { VerifyEmail } from "@/emails/verify-email";
 import { ResetPassword } from "@/emails/reset-password";
+import { sendWelcomeEmail } from "@/lib/email/notifications";
 
 const FROM_EMAIL = "Sparebox <noreply@sparebox.dev>";
 
@@ -61,6 +62,13 @@ export const auth = betterAuth({
         subject: "Verify your Sparebox email",
         html,
       });
+    },
+    afterEmailVerification: async (user: { email: string; name: string | null; role?: string }) => {
+      // Send welcome email after successful verification (fire-and-forget)
+      sendWelcomeEmail(user.email, {
+        userName: user.name || "",
+        role: (user.role as "host" | "deployer" | "default") || "default",
+      }).catch((err) => console.error("[email] Failed to send welcome email:", err));
     },
   },
   session: {
