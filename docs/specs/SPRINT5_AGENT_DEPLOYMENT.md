@@ -26,170 +26,303 @@ What's missing:
 
 ---
 
+## Resource Tiers
+
+Every agent on Sparebox runs in a standardized resource tier. This creates predictable pricing and prevents a single agent from starving others on shared hardware.
+
+### Tier Definitions
+
+| Tier | RAM | CPU | Disk | Best For | Typical Pricing |
+|------|-----|-----|------|----------|-----------------|
+| **Lite** | 1 GB | 0.5 cores | 5 GB | Simple chatbots, webhook-only agents, low-traffic automations. API-only workloads (Anthropic/OpenAI) with no browser or heavy tools. | $5–10/mo |
+| **Standard** | 2 GB | 1 core | 10 GB | Most agents. Chat agents with channels (Telegram, Discord), tool use, memory, moderate traffic. The "default" tier. | $10–20/mo |
+| **Pro** | 4 GB | 2 cores | 20 GB | Power agents. Browser automation, multi-channel setups, complex tool chains, coding agents (Claude Code-style). | $20–40/mo |
+| **Compute** | 8 GB | 4 cores | 40 GB | Local model inference (Ollama 7B quantized), heavy automation, multiple sub-agents, persistent browser sessions. | $40–80/mo |
+
+### Why These Numbers
+
+**RAM is the constraint that matters.** OpenClaw's gateway process:
+- **Bare minimum to boot:** ~512 MB (confirmed by Render OOM at 512 MB — issue #5966)
+- **Stable idle:** ~600–800 MB
+- **Active with tools/sessions:** 1–2 GB
+- **With browser automation:** 2–4 GB (Chromium is hungry)
+- **With local LLM (Ollama 7B q4):** 6–8 GB additional
+
+CPU matters less because most agent work is I/O-bound (waiting on API responses). Disk matters for workspace files, session history, and model weights.
+
+**Local model reality check:**
+| Model Size | Quantization | RAM Required | Tier |
+|-----------|-------------|-------------|------|
+| 3B (Phi-3, Gemma 2) | Q4_K_M | ~3 GB | Pro |
+| 7B (Llama 3, Mistral) | Q4_K_M | ~6 GB | Compute |
+| 13B (Llama 3) | Q4_K_M | ~10 GB | Not supported (exceeds max tier) |
+| 70B+ | Any | 48+ GB | Not supported |
+
+Deployers wanting to run local models need the **Compute** tier minimum. Most deployers using API-based models (Anthropic, OpenAI) will be fine on **Standard** or **Pro**.
+
+### Host Slot Calculation
+
+The daemon calculates available slots per tier based on verified hardware:
+
+```
+System overhead reserve: 1 GB RAM + 0.5 CPU cores
+
+Available = Total - Reserved
+Lite slots   = floor(Available RAM / 1 GB)
+Standard slots = floor(Available RAM / 2 GB)
+Pro slots    = floor(Available RAM / 4 GB)
+Compute slots  = floor(Available RAM / 8 GB)
+```
+
+Each slot is also constrained by CPU:
+```
+Max slots by CPU = floor(Available Cores / tier.cores)
+Effective slots  = min(RAM-based slots, CPU-based slots)
+```
+
+**Example:** A host with 32 GB RAM and 8 cores:
+- Reserved: 1 GB + 0.5 cores → 31 GB available, 7.5 cores available
+- Lite: min(31, 15) = 15 slots
+- Standard: min(15, 7) = 7 slots
+- Pro: min(7, 3) = 3 slots
+- Compute: min(3, 1) = 1 slot
+
+Hosts choose which tiers to offer and set prices per tier. The platform shows available slots per tier on the browse page.
+
+Hosts can also set a manual cap lower than the calculated maximum (e.g., "I only want to run 3 agents max on this machine even though I could fit 7").
+
+---
+
 ## Architecture Decisions
 
 ### Decision 1: How does the agent config get to the host?
 
-**Options:**
+**→ API download via secure endpoint**
 
-| Option | Pros | Cons |
-|--------|------|------|
-| **A) API download** — Daemon polls platform for pending deploy commands, downloads config JSON | Simple, no git needed, works everywhere, config stays on platform | Requires secure config endpoint, limited to JSON config |
-| **B) Git repo clone** — Deployer provides a git repo URL, daemon clones it | Familiar workflow, version controlled, supports complex setups | Requires git on host, auth for private repos, deployment latency |
-| **C) Inline config in deploy command** — Full config embedded in heartbeat command response | Simplest, zero extra requests, atomic | Config size limited by response payload, no large files |
+The deploy command arrives via heartbeat response. The daemon then hits a secure endpoint (`GET /api/agents/{id}/deploy-config`) authenticated with its API key to download the full agent configuration bundle.
 
-**Recommendation: Option A (API download)**
+The config bundle includes:
+- OpenClaw `openclaw.json` configuration (model, channels, tools, sandbox settings)
+- Workspace files (SOUL.md, AGENTS.md, USER.md, IDENTITY.md, custom files)
+- Deployer's encrypted LLM API key (see Decision 5)
+- Resource tier allocation (RAM, CPU, disk limits)
 
-The deploy command comes through the heartbeat response. The daemon then hits a secure endpoint (`GET /api/agents/{id}/config`) with its API key to download the full agent configuration. This is the simplest approach that works everywhere.
+**Why not git?** Git adds complexity (auth, cloning, version management) that isn't needed for MVP. Most deployers will configure their agent through the Sparebox dashboard, not a repo. Git-based deployment can be a power-user feature later.
 
-The config is a JSON object containing:
-- Agent name
-- Model preference (or use host's default)
-- System prompt / SOUL.md content
-- Workspace files to create
-- Channel config (if any)
-- Resource limits (CPU%, RAM MB)
-
-**Rationale:** Git adds complexity for MVP. Most deployers just want to configure an agent via the dashboard, not manage a repo. Git-based deployment can be added later as a "power user" feature.
+**Why not inline in heartbeat?** Config bundles can be large (workspace files, custom tools). Keeping them out of the heartbeat response keeps that path lightweight and fast.
 
 ---
 
 ### Decision 2: How does the daemon install/run OpenClaw?
 
-**Options:**
+**→ Docker containers per agent (official OpenClaw image)**
 
-| Option | Pros | Cons |
-|--------|------|------|
-| **A) Auto-install via npm** — Daemon runs `npm i -g openclaw` per agent | Always latest version, clean separation | Requires npm, slow on first deploy, global install conflicts |
-| **B) Bundled with daemon** — Ship OpenClaw as part of the daemon bundle | Fast deploy, no internet needed after install | Large bundle, version updates require daemon update |
-| **C) Profile-based isolation** — Single OpenClaw install, each agent uses `--profile` | Efficient, uses built-in OpenClaw isolation, lightweight | Requires OpenClaw pre-installed on host, single version |
-| **D) Docker per agent** — Each agent runs in its own container | Strongest isolation, resource limits built-in | Requires Docker, heavier resource usage, complex |
+~~Profile-based isolation was the original plan, but after Isaac's feedback on multi-tenant security, we're going straight to Docker.~~
 
-**Recommendation: Option C (Profile-based isolation) for MVP, Option D (Docker) as future upgrade**
+**Each deployed agent runs in its own Docker container** using the official OpenClaw image (`ghcr.io/openclaw/openclaw`). This provides:
 
-OpenClaw already supports `--profile <name>` which creates fully isolated state, config, sessions, and workspace per agent. This is exactly what we need:
+- **Filesystem isolation:** Each container has its own filesystem. Agent A cannot read Agent B's workspace, memory, config, or API keys.
+- **Network isolation:** Each container gets its own network namespace. Agents cannot sniff each other's traffic or access each other's ports.
+- **Resource enforcement:** Docker's `--memory` and `--cpus` flags use kernel cgroups to hard-cap resources. An agent that tries to exceed its allocation gets OOM-killed, not slowed down.
+- **Process isolation:** PID namespace prevents agents from seeing or signaling each other's processes.
+- **Clean teardown:** `docker rm -f` guarantees complete cleanup with no leftover state.
+
+#### Why Docker over `--profile` isolation
+
+OpenClaw's `--profile` flag provides workspace and session isolation, but:
+- All profiles share the same filesystem — a misconfigured agent could read `/etc/passwd`, other users' home directories, or other profiles' workspaces via absolute paths.
+- No resource enforcement — a runaway agent consumes all available RAM/CPU.
+- No network isolation — all profiles can access `localhost` services, including each other's gateway ports.
+- Process trees are visible to each other.
+
+For a multi-tenant platform where **strangers' agents run on the same machine**, `--profile` is not enough. Docker is the minimum viable isolation.
+
+#### Docker installation strategy
+
+**Problem:** Most hosts won't have Docker pre-installed, and our current install script doesn't set it up.
+
+**Solution:** The daemon install script gains a Docker setup phase:
+
+1. **Check for Docker/Podman** — if already installed, use it
+2. **If not installed, attempt rootless Docker** — `curl -fsSL https://get.docker.com/rootless | sh` (works without root on most modern Linux distros with `newuidmap`/`newgidmap` and `/etc/subuid` configured)
+3. **If rootless fails, try Podman** — available in default repos on most distros, supports rootless by default
+4. **If neither works, fall back to `--profile` mode** — with a clear warning that isolation is limited
+
+The daemon reports its isolation mode in the heartbeat: `"isolation": "docker" | "podman" | "profile"`. The platform shows this on the browse page so deployers can make informed decisions.
+
+**Hosts with Docker get a "Verified Isolation" badge.** Deployers can filter for Docker-only hosts if they want guaranteed isolation.
+
+#### Container lifecycle
 
 ```bash
-# Each deployed agent gets its own profile
-openclaw --profile agent-{agentId} setup
-openclaw --profile agent-{agentId} gateway --port {assignedPort}
+# Deploy an agent
+docker run -d \
+  --name sparebox-agent-{shortId} \
+  --memory {tierRamMb}m \
+  --cpus {tierCpuCores} \
+  --network none \
+  --restart unless-stopped \
+  -v {agentDir}/workspace:/home/node/.openclaw/workspace:rw \
+  -v {agentDir}/state:/home/node/.openclaw:rw \
+  -e ANTHROPIC_API_KEY={encryptedKey} \
+  ghcr.io/openclaw/openclaw:latest
+
+# Inside the container, onboard + start gateway
+docker exec sparebox-agent-{shortId} openclaw onboard --non-interactive
+docker exec sparebox-agent-{shortId} openclaw gateway start
+
+# Stop
+docker stop sparebox-agent-{shortId}
+
+# Undeploy
+docker rm -f sparebox-agent-{shortId}
+docker volume rm sparebox-agent-{shortId}-workspace sparebox-agent-{shortId}-state
 ```
 
-Each profile creates:
-- `~/.openclaw-agent-{agentId}/` — isolated state directory
-- `~/.openclaw-agent-{agentId}/workspace/` — isolated workspace
-- `~/.openclaw-agent-{agentId}/openclaw.json` — agent-specific config
-- Separate port (auto-assigned, spaced 20+ apart)
+**Key Docker flags:**
+- `--memory {limit}` — Hard RAM cap, OOM kills if exceeded
+- `--cpus {limit}` — CPU quota (e.g., `--cpus 1.0` = 1 full core)
+- `--network none` — No network access by default (secure)
+- `--restart unless-stopped` — Auto-restart on crash
 
-**Prerequisites:**
-- OpenClaw must be installed on the host machine (`npm i -g openclaw`)
-- The install script already ensures Node.js 20+ is present
-- We add `npm i -g openclaw` to the daemon install script
+**Network access:** Most agents need outbound internet (API calls to Anthropic/OpenAI, web search, etc.). We use a custom Docker network with outbound-only rules:
 
-**Rationale:** Profile isolation is built into OpenClaw and provides workspace/session/config separation without Docker overhead. Most hosts won't have Docker installed, and requiring it raises the barrier to entry. Docker isolation can be a "verified host" tier later.
+```bash
+# Create isolated network (once)
+docker network create --driver bridge sparebox-agents
+
+# Run with outbound internet but no inter-container communication
+docker run -d \
+  --name sparebox-agent-{shortId} \
+  --network sparebox-agents \
+  --memory {tierRamMb}m \
+  --cpus {tierCpuCores} \
+  -v ... \
+  ghcr.io/openclaw/openclaw:latest
+```
+
+Each container can reach the internet but cannot access `localhost` on the host or communicate with other agent containers. Inter-container communication is disabled via `--icc=false` on the network.
+
+#### Profile fallback mode
+
+For hosts where Docker isn't available (Windows, macOS without Docker Desktop, systems without `newuidmap`):
+
+```bash
+openclaw --profile sparebox-agent-{shortId} setup
+openclaw --profile sparebox-agent-{shortId} gateway start --port {assignedPort}
+```
+
+This provides workspace/session isolation but **no** resource enforcement or filesystem/network isolation. The platform clearly labels these hosts as "Limited Isolation" on the browse page.
 
 ---
 
 ### Decision 3: How does the deployer connect to their agent?
 
-**Options:**
+**→ API-mediated commands via heartbeat (MVP)**
 
-| Option | Pros | Cons |
-|--------|------|------|
-| **A) Platform relay** — Deployer interacts through Sparebox dashboard, platform proxies to agent | Simple UX, no direct connection needed, full control | Adds latency, platform is SPOF, complex proxy |
-| **B) Direct Tailscale** — Agent exposed via Tailscale, deployer connects directly | Low latency, real-time, standard OpenClaw UX | Requires Tailscale on both sides, exposing ports |
-| **C) WebSocket proxy** — Platform maintains WS connection to each agent, proxies commands | Real-time, deployer uses dashboard, no direct networking | Complex, requires persistent WS connections |
-| **D) API-mediated commands** — Deployer sends commands via platform API, daemon executes and reports back | Simple, works with existing heartbeat flow, no persistent connections | Not real-time (up to 60s latency), limited interactivity |
-
-**Recommendation: Option D (API-mediated) for MVP, Option A/C for post-MVP**
-
-For MVP, the deployer doesn't need real-time chat with their agent. They need:
-1. Start/stop the agent
-2. View agent status and basic logs
-3. Update agent configuration
-
-All of these can be handled through the existing heartbeat command flow:
+For MVP, all agent management flows through the existing heartbeat cycle:
 
 ```
-Deployer clicks "Stop" → Platform sets command in DB → 
-Next heartbeat (≤60s) → Daemon receives command → 
-Daemon stops agent → Next heartbeat reports status → 
+Deployer clicks "Stop" → Command queued in DB →
+Next heartbeat (≤60s) → Daemon receives command →
+Daemon stops container → Next heartbeat reports status →
 Dashboard updates
 ```
 
-This is simpler than building a WebSocket proxy and works with our existing architecture. The 60-second latency is acceptable for start/stop/configure operations.
+The 60-second latency is fine for start/stop/configure operations. This isn't a real-time chat interface — it's infrastructure management.
 
-**Future:** For real-time interaction (chat with your agent, live logs), we'd add a WebSocket connection from the daemon to the platform, or use Tailscale for direct connectivity. This is Sprint 7+ territory.
+**What the deployer can do via the dashboard:**
+- Start / stop / restart agent
+- View agent status (running, stopped, deploying, error)
+- View resource usage (CPU%, RAM from container stats)
+- Edit agent configuration (full OpenClaw config)
+- View recent agent events (started, stopped, crashed, OOM killed)
+
+**What's NOT in MVP:**
+- Real-time chat with the agent (requires WebSocket proxy)
+- Live log streaming (requires persistent connection)
+- Direct Tailscale/SSH access to the agent container
+
+**Future (Sprint 7+):** The daemon establishes a WebSocket connection to the platform for real-time command delivery and log streaming. Or: Tailscale for direct deployer→agent connectivity.
 
 ---
 
-### Decision 4: Resource isolation — How do we prevent one agent from consuming all host resources?
+### Decision 4: How deployers configure their agents
 
-**Options:**
+**→ Full OpenClaw config access**
 
-| Option | Pros | Cons |
-|--------|------|------|
-| **A) Process limits (ulimit)** — Set per-process resource limits | Simple, no Docker needed, works everywhere | Coarse-grained, limited to single process tree |
-| **B) cgroups (Linux only)** — Create cgroup per agent | Fine-grained CPU/memory/IO limits | Linux-only, requires root or cgroup v2 delegation |
-| **C) Docker resource flags** — `--memory`, `--cpus` per container | Standard, well-supported, cross-platform-ish | Requires Docker |
-| **D) Configuration-based soft limits** — Tell agent to use less, monitor compliance | No system-level changes, works everywhere | Not enforced, agent could exceed limits |
-| **E) Monitoring + kill** — Monitor resource usage, kill agents that exceed limits | Simple, works everywhere, reactive | Agent runs unconstrained until killed, bad UX |
+The deployer should be able to configure everything they'd configure on their own machine. We're not making a dumbed-down version of OpenClaw — we're making it easier to deploy.
 
-**Recommendation: Option D + E (Soft limits with monitoring) for MVP**
+**Configuration UI in the dashboard:**
 
-For MVP, we:
-1. Configure each OpenClaw agent with resource-aware settings (model selection affects resource usage)
-2. The daemon monitors per-agent CPU/RAM via process tree tracking
-3. If an agent exceeds its allocated resources for >60 seconds, the daemon stops it and reports the violation
-4. The platform notifies the deployer
+1. **Quick Setup (default view):**
+   - Agent name
+   - System prompt (textarea → becomes SOUL.md)
+   - Model selection (dropdown: Claude Sonnet, Opus, GPT-4o, etc.)
+   - LLM API key (encrypted, stored securely)
 
-This avoids requiring Docker, root access, or Linux-specific features. It works on macOS, Linux, and Windows.
+2. **Workspace Files (tab):**
+   - File tree editor for workspace files
+   - Pre-populated templates: SOUL.md, AGENTS.md, USER.md, IDENTITY.md
+   - Create/edit/delete custom files
+   - Upload files (max 10 MB per file, 50 MB total)
 
-**Implementation:**
-- Daemon tracks child PIDs per agent profile
-- Each heartbeat reports per-agent CPU% and RAM MB
-- Platform compares against host's advertised specs and per-agent limits
-- Daemon has a local watchdog that kills runaway agents
+3. **Advanced Config (tab):**
+   - Raw JSON5 editor for `openclaw.json`
+   - Channel configuration (Telegram bot token, Discord token, etc.)
+   - Tool configuration (allow/deny lists)
+   - Sandbox settings
+   - Model fallbacks
+   - Pre-validated against OpenClaw's config schema
 
-**Future:** Docker-based isolation for "premium" or "verified" hosts. Stronger enforcement via cgroups on Linux hosts that opt in.
+4. **Channels (tab — future):**
+   - Visual channel setup wizard
+   - QR code pairing for WhatsApp
+   - Bot token entry for Telegram/Discord
+
+For MVP, we ship Quick Setup + Workspace Files + Advanced Config. The Channels tab comes later.
+
+**Config storage:**
+- Stored in DB as JSONB (`agents.config` column for openclaw.json, `agents.workspace_files` for file tree)
+- Deployer edits config via dashboard → saves to DB → creates `update_config` command → next heartbeat picks it up → daemon updates container
+
+---
+
+### Decision 5: LLM API key security
+
+**→ Deployers bring their own keys, encrypted at rest and in transit**
+
+The deployer provides their LLM API key (Anthropic, OpenAI, etc.) when configuring their agent. This key:
+
+1. **Encrypted at rest** in the database using AES-256-GCM with a platform encryption key (stored in env var, never in code)
+2. **Transmitted to daemon** via the deploy-config endpoint over HTTPS
+3. **Injected into the Docker container** as an environment variable at container creation time
+4. **Never stored on disk** on the host machine — only in container memory
+5. **Never visible to the host owner** — the daemon handles key injection without exposing the plaintext value
+
+```
+Deployer enters key → Platform encrypts → Stored in DB →
+Deploy command → Daemon fetches config (HTTPS) →
+Daemon decrypts with platform-provided session key →
+Docker run -e ANTHROPIC_API_KEY=... → Container only
+```
+
+**Security model:** The daemon receives a one-time session key with each deploy command. It uses this to decrypt the API key, passes it to Docker as an env var, and discards the session key. The host owner can see that a container is running but cannot extract the API key from inside it (Docker env vars require `docker inspect`, which we can prevent by running containers under a separate user).
+
+**Threat model considerations:**
+- Host has root access → they CAN extract the key from container memory/env. This is an inherent limitation of running on someone else's hardware. We mitigate with: clear ToS, reputation system, and flagging hosts that have key leaks reported.
+- Man-in-the-middle → mitigated by HTTPS for all daemon↔platform communication
+- Database breach → mitigated by AES-256-GCM encryption of keys at rest
+
+**Future:** Hardware attestation (TPM), encrypted enclaves (Intel SGX/AMD SEV), or key-per-request proxy (platform proxies all LLM API calls so keys never touch the host at all).
 
 ---
 
 ## Implementation Plan
 
-### Phase 1: Deploy Command Flow (~3h)
+### Phase 1: Command Queue + Heartbeat Integration (~3h)
 
-**1.1 Agent config endpoint**
-- `GET /api/agents/{id}/deploy-config` — Returns the full OpenClaw config for an agent
-- Auth: daemon API key (same as heartbeat)
-- Returns: JSON with agent settings, SOUL.md content, workspace files, model, resource limits
-
-**1.2 Deploy command in heartbeat response**
-- When an agent is in "pending" status and subscription is active, include a deploy command:
-```json
-{
-  "commands": [
-    {
-      "type": "deploy",
-      "agentId": "uuid",
-      "configUrl": "/api/agents/{id}/deploy-config",
-      "profile": "agent-{shortId}",
-      "port": 19001
-    }
-  ]
-}
-```
-
-**1.3 Stop/start/restart commands**
-```json
-{ "type": "stop", "agentId": "uuid", "profile": "agent-{shortId}" }
-{ "type": "start", "agentId": "uuid", "profile": "agent-{shortId}" }
-{ "type": "restart", "agentId": "uuid", "profile": "agent-{shortId}" }
-{ "type": "undeploy", "agentId": "uuid", "profile": "agent-{shortId}" }
-```
-
-**1.4 Command queue in database**
-New table: `agent_commands`
+**1.1 Database: `agent_commands` table**
 ```sql
 CREATE TABLE agent_commands (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -197,127 +330,186 @@ CREATE TABLE agent_commands (
   host_id UUID NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
   type TEXT NOT NULL, -- deploy, start, stop, restart, undeploy, update_config
   payload JSONB,
-  status TEXT NOT NULL DEFAULT 'pending', -- pending, sent, acked, failed
+  status TEXT NOT NULL DEFAULT 'pending', -- pending, sent, acked, failed, expired
   created_at TIMESTAMP DEFAULT NOW(),
   sent_at TIMESTAMP,
   acked_at TIMESTAMP,
   error TEXT
 );
+
+CREATE INDEX idx_agent_commands_host_pending ON agent_commands(host_id, status)
+  WHERE status = 'pending';
+CREATE INDEX idx_agent_commands_agent ON agent_commands(agent_id);
 ```
 
-**1.5 Heartbeat endpoint changes**
-- Query pending commands for this host
-- Include in response
-- Mark as "sent" after including in response
-- Accept command acknowledgments in heartbeat payload
+**1.2 Database: agents table additions**
+```sql
+ALTER TABLE agents ADD COLUMN config JSONB DEFAULT '{}';
+ALTER TABLE agents ADD COLUMN workspace_files JSONB DEFAULT '{}';
+ALTER TABLE agents ADD COLUMN tier TEXT NOT NULL DEFAULT 'standard';
+ALTER TABLE agents ADD COLUMN encrypted_api_key TEXT;
+ALTER TABLE agents ADD COLUMN container_id TEXT;
+ALTER TABLE agents ADD COLUMN isolation_mode TEXT DEFAULT 'docker';
+```
 
-### Phase 2: Daemon Agent Manager (~4h)
+**1.3 Deploy-config endpoint**
+- `GET /api/agents/{id}/deploy-config` — authenticated with daemon API key
+- Returns full config bundle (openclaw.json + workspace files + encrypted key)
+- Only returns config for agents assigned to the requesting host
 
-**2.1 OpenClaw installation check**
-- On daemon startup, check if `openclaw` CLI is available
-- If not, auto-install: `npm i -g openclaw`
-- Report OpenClaw version in heartbeat
+**1.4 Heartbeat endpoint changes**
+- Query pending commands for this host (`WHERE host_id = ? AND status = 'pending'`)
+- Include commands in response
+- Mark as `sent` after including
+- Accept command ack/nack in heartbeat payload: `{ commandAcks: [{ id, status, error? }] }`
+- Expire commands older than 5 minutes without ack (mark `expired`)
+
+**1.5 tRPC mutations for agent management**
+- `agents.sendCommand(agentId, type, payload?)` — creates command in DB
+- `agents.getCommands(agentId)` — list recent commands with status
+- `agents.updateConfig(agentId, config, workspaceFiles)` — save config + create `update_config` command
+
+### Phase 2: Daemon Agent Manager (~5h)
+
+**2.1 Docker/Podman detection and setup**
+- On daemon startup, check for `docker` or `podman` CLI
+- Report isolation capability in heartbeat: `"isolation": "docker" | "podman" | "profile" | "none"`
+- Auto-pull OpenClaw image on first deploy: `docker pull ghcr.io/openclaw/openclaw:latest`
 
 **2.2 Command handler**
-- Process commands from heartbeat response
-- Deploy: download config → create profile → write config → start gateway
-- Start: `openclaw --profile {profile} gateway start`
-- Stop: `openclaw --profile {profile} gateway stop`
-- Undeploy: stop + remove profile directory
-- Update config: stop → update config → start
+Process commands from heartbeat response:
 
-**2.3 Agent process management**
-- Track running agent profiles and their PIDs
-- Report agent status in heartbeat `agentStatuses` array
-- Graceful shutdown: stop all agents when daemon stops
+- **`deploy`**: Download config → create host directories → decrypt API key → `docker run` with resource limits → wait for container health → ack
+- **`start`**: `docker start {containerId}` → ack
+- **`stop`**: `docker stop {containerId}` → ack
+- **`restart`**: `docker restart {containerId}` → ack
+- **`undeploy`**: `docker rm -f {containerId}` → clean up host directories → ack
+- **`update_config`**: Download new config → `docker stop` → update mounted volumes → `docker start` → ack
+
+Each command handler:
+1. Executes the action
+2. Catches errors
+3. Adds ack/nack to next heartbeat payload
+
+**2.3 Container monitoring**
+- `docker stats --no-stream` per container → CPU%, RAM usage, RAM limit
+- Report per-agent metrics in heartbeat `agentStatuses` array:
+```json
+{
+  "agentStatuses": [
+    {
+      "agentId": "uuid",
+      "status": "running",
+      "containerId": "abc123",
+      "cpuPercent": 12.5,
+      "ramUsageMb": 850,
+      "ramLimitMb": 2048,
+      "uptimeSeconds": 3600,
+      "restartCount": 0
+    }
+  ]
+}
+```
 
 **2.4 Port management**
-- Assign ports starting from base 19001, increment by 20 per agent
-- Track used ports in `~/.sparebox/ports.json`
-- Free port on undeploy
+- Each agent container exposes its gateway port only to the host (not publicly)
+- Port allocation: start at 19001, increment by 1 per agent
+- Track in `~/.sparebox/containers.json`
 
-**2.5 Resource monitoring**
-- Track CPU% and RAM MB per agent process tree
-- Report in heartbeat
-- Kill agent if exceeding limits for >60 seconds
+**2.5 Profile fallback (non-Docker hosts)**
+- If Docker unavailable, use `openclaw --profile sparebox-{shortId}`
+- Resource monitoring via process tree (PID tracking + `ps`)
+- Watchdog: kill agent process if RAM exceeds tier limit for >60 seconds
 
-### Phase 3: Dashboard Integration (~3h)
+**2.6 OpenClaw image management**
+- Pull `ghcr.io/openclaw/openclaw:latest` on first deploy
+- Check for updates daily (or when daemon itself updates)
+- Report OpenClaw version per container in heartbeat
 
-**3.1 Deploy agent flow update**
-- After Stripe checkout completes, set agent status to "pending_deploy"
-- Heartbeat picks up the deploy command
-- Dashboard shows deployment progress: "Deploying..." → "Running" → error states
+### Phase 3: Dashboard Integration (~4h)
+
+**3.1 Deploy flow update**
+- After Stripe checkout webhook, set agent status to `pending_deploy`
+- Create `deploy` command in `agent_commands`
+- Dashboard shows progress: "Waiting for host..." → "Deploying..." → "Running"
+- Error states: "Deploy failed: {error}" with retry button
 
 **3.2 Agent management controls**
-- Wire start/stop/restart buttons to create commands in DB
-- Show real-time(ish) status from heartbeat data
-- Show basic logs (agent start/stop events, errors)
+- Wire start/stop/restart buttons to `agents.sendCommand` mutation
+- Real-time(ish) status polling (refetch every 15s while on agent detail page)
+- Show container stats: CPU%, RAM usage vs limit, uptime, restart count
 
 **3.3 Agent configuration UI**
-- Model selection (from host's available models — or use API key from deployer)
-- System prompt / personality editor
-- Workspace file editor (simple text editor for SOUL.md, AGENTS.md, etc.)
+- **Quick Setup tab**: Name, system prompt textarea, model dropdown, API key input (password field, "Update key" button)
+- **Workspace Files tab**: File tree with create/edit/delete, Monaco editor (or CodeMirror) for file content, templates for SOUL.md/AGENTS.md/USER.md
+- **Advanced Config tab**: JSON5 editor for openclaw.json with syntax highlighting and validation
+- Save triggers `update_config` command
 
-**3.4 Deployer dashboard updates**
-- Show agent health metrics (CPU, RAM from host heartbeat)
-- Show agent uptime
-- Connection status
+**3.4 Deploy wizard updates**
+- Add tier selection step (Lite/Standard/Pro/Compute)
+- Show tier descriptions with recommended use cases
+- Price varies by tier (host sets per-tier pricing)
+- Show host's available slots per tier
 
-### Phase 4: Configuration System (~2h)
+**3.5 Browse page updates**
+- Show isolation mode badge: "Docker Isolated" (green) / "Limited Isolation" (yellow)
+- Show available slots per tier
+- Filter by isolation mode
+- Filter by tier availability
 
-**4.1 Agent config builder**
-- tRPC mutation: `agents.updateConfig` — deployer sets agent personality, model, etc.
-- Generate OpenClaw config JSON from platform settings
-- Store in DB (agents table: new `config` JSONB column)
+### Phase 4: Security & Encryption (~3h)
 
-**4.2 Config delivery**
-- Deploy-config endpoint reads from DB and returns OpenClaw-compatible JSON
-- Includes: model, system prompt files, workspace files, channel config
-- No API keys from deployer in MVP — deployers must bring their own model API keys (stored encrypted) or the host provides models
+**4.1 API key encryption**
+- AES-256-GCM encryption using `SPAREBOX_ENCRYPTION_KEY` env var
+- Encrypt on save: `agents.updateConfig` encrypts API key before DB write
+- Decrypt on delivery: deploy-config endpoint decrypts for config bundle
+- Key rotation: re-encrypt all keys when `SPAREBOX_ENCRYPTION_KEY` changes
 
-**4.3 API key management for models**
-- Deployers can optionally provide their own LLM API key (Anthropic, OpenAI)
-- Key is encrypted at rest, passed to agent config
-- If no key provided, host must have models configured (local or their own API keys)
-- **Security:** Deployer API keys are NEVER exposed to the host owner
+**4.2 Deploy-config endpoint security**
+- Authenticated with daemon API key (existing auth)
+- Only returns config for agents on the requesting host
+- Rate limited (10 requests/minute per host)
+- Config bundle signed with HMAC to prevent tampering in transit
+
+**4.3 Container security hardening**
+- `--read-only` root filesystem (workspace volume is writable)
+- `--security-opt=no-new-privileges` — prevent privilege escalation
+- `--cap-drop=ALL` — drop all Linux capabilities
+- No Docker socket mount (agents can't manage containers)
+- User namespace isolation (`--userns=host` avoided)
+
+**4.4 Host verification**
+- Report isolation mode in heartbeat
+- Platform verifies Docker isolation is active
+- "Verified Isolation" badge on browse page
+- Allow deployers to filter for Docker-only hosts
 
 ---
 
-## MVP Scope (What we build in Sprint 5)
+## MVP Scope
 
 **In scope:**
-- [ ] Command queue (DB table + heartbeat integration)
+- [ ] Command queue (DB table + heartbeat integration + acks)
 - [ ] Deploy command flow (pending → deploying → running)
-- [ ] Daemon agent manager (install OpenClaw, create profiles, start/stop)
+- [ ] Daemon agent manager with Docker containers
+- [ ] Profile fallback for non-Docker hosts
+- [ ] Resource tiers (Lite/Standard/Pro/Compute)
 - [ ] Start/stop/restart from dashboard
-- [ ] Agent status reporting via heartbeat
-- [ ] Basic agent config (name, system prompt, model)
+- [ ] Agent status + container metrics via heartbeat
+- [ ] Agent configuration UI (Quick Setup + Workspace Files + Advanced)
+- [ ] Deployer API key encryption (AES-256-GCM)
+- [ ] Container security hardening
+- [ ] Isolation mode badges on browse page
 - [ ] Port management on host
-- [ ] Resource monitoring (report, not enforce)
 
 **Out of scope (future sprints):**
-- Real-time chat with deployed agent
+- Real-time chat with deployed agent (WebSocket proxy)
 - Live log streaming
-- Docker-based isolation
-- Git-based deployment
-- Custom channel configuration (Telegram/Discord per agent)
+- Channel configuration wizard (visual QR/token setup)
 - Agent-to-agent communication
 - Auto-scaling / multiple hosts per agent
-- Deployer-provided API key management
-
----
-
-## Key Questions for Isaac
-
-1. **Model API keys:** Should the MVP require hosts to have their own LLM API keys configured, or should deployers provide their own? (Hosting someone else's API key is a trust/security issue.)
-
-2. **OpenClaw version:** Should we pin a specific OpenClaw version, or always use latest? (Latest is simpler but could introduce breaking changes.)
-
-3. **Agent limits per host:** Should we enforce a maximum number of agents per host machine? (Prevents resource exhaustion.)
-
-4. **What can the deployer configure?** For MVP, should they just set a system prompt + model, or do they need file editing (SOUL.md, custom tools, etc.)?
-
-5. **Pricing model implication:** Right now pricing is per-host-subscription. Should it be per-agent? (Multiple deployers could share one host if we split resources.)
+- Hardware attestation (TPM/SGX)
+- API call proxying (platform proxies LLM calls)
 
 ---
 
@@ -325,22 +517,38 @@ CREATE TABLE agent_commands (
 
 | Phase | Hours | Description |
 |-------|-------|-------------|
-| Phase 1 | ~3h | Command queue + heartbeat integration |
-| Phase 2 | ~4h | Daemon agent manager |
-| Phase 3 | ~3h | Dashboard integration |
-| Phase 4 | ~2h | Configuration system |
-| **Total** | **~12h** | |
+| Phase 1 | ~3h | Command queue + DB schema + heartbeat changes |
+| Phase 2 | ~5h | Daemon agent manager + Docker + monitoring |
+| Phase 3 | ~4h | Dashboard UI (config editor, deploy flow, management) |
+| Phase 4 | ~3h | Encryption + container security + verification |
+| **Total** | **~15h** | |
 
 ---
 
 ## Risk Assessment
 
-| Risk | Mitigation |
-|------|------------|
-| OpenClaw not installed on host | Auto-install in daemon, check in heartbeat |
-| Port conflicts | Port allocation system with tracking file |
-| Runaway agent consuming all resources | Monitoring + kill watchdog |
-| Deployer's agent crashes host daemon | Process isolation (separate process tree) |
-| Config delivery fails | Retry logic, error reporting in heartbeat |
-| Host goes offline mid-deploy | Pending state persists, retries on reconnect |
-| API key security (deployer keys on host) | Defer to post-MVP, hosts provide own models for now |
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Docker not available on host | Agent runs without isolation (profile fallback) | Clear UI labeling, deployer choice, install script attempts rootless Docker |
+| Host owner extracts deployer API key from container | Key compromise | ToS, reputation system, future: API proxying so keys never touch host |
+| OpenClaw image too large (~500MB) | Slow first deploy | Pull image ahead of time (on daemon install, not first deploy) |
+| Container OOM kills | Agent crashes, deployer frustrated | Clear tier descriptions, pre-deploy RAM estimate, auto-restart |
+| Port conflicts on host | Container fails to start | Dynamic port allocation with conflict detection |
+| Config delivery fails | Agent stuck in "deploying" state | Retry logic, command expiry (5 min), manual retry button |
+| Host goes offline mid-deploy | Orphaned pending state | Heartbeat timeout → mark agent "host_offline", auto-retry on reconnect |
+| Deployer provides invalid OpenClaw config | Container crashes on start | Pre-validate config against OpenClaw schema before saving |
+| Docker rootless requires system prerequisites | Install script fails | Fallback to Podman, then profile mode, clear error messages |
+
+---
+
+## Answered Questions
+
+1. **Model API keys:** Deployers bring their own keys. Encrypted at rest (AES-256-GCM), decrypted only at deploy time, injected as container env var. Host never sees plaintext.
+
+2. **OpenClaw version:** Always latest (`ghcr.io/openclaw/openclaw:latest`). Daemon checks for image updates daily. Simple, no version management overhead. If a breaking change hits, we pin a specific tag at the platform level.
+
+3. **Agent limits per host:** Dynamic based on hardware and tier. Formula: `(total - overhead) / tier_allocation`, capped by both RAM and CPU. Host can set a manual cap below the calculated max.
+
+4. **What can the deployer configure?** Everything. Full OpenClaw config access via JSON5 editor + workspace file editor + quick setup wizard. Same power as running OpenClaw on your own machine, better UX.
+
+5. **Pricing model:** Per-agent, per-tier. Host sets prices per tier. Multiple deployers share one host machine, each agent gets its standardized resource allocation enforced by Docker.
