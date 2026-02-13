@@ -4,7 +4,7 @@ import { router, protectedProcedure, hostProcedure } from "../trpc";
 import { hosts, hostHeartbeats, hostApiKeys, agents, subscriptions } from "@/db";
 import { eq, desc, and, gte, sql, not, isNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { API_KEY_PREFIX, API_KEY_ENTROPY_BYTES } from "@/lib/constants";
+import { API_KEY_PREFIX, API_KEY_ENTROPY_BYTES, HEARTBEAT_STALE_THRESHOLD_MS } from "@/lib/constants";
 
 export const hostsRouter = router({
   // List hosts for the current user
@@ -28,6 +28,20 @@ export const hostsRouter = router({
 
       if (!host || host.userId !== ctx.user.id) {
         throw new Error("Host not found");
+      }
+
+      // Lazy staleness check
+      if (
+        host.status === "active" &&
+        host.lastHeartbeat &&
+        Date.now() - new Date(host.lastHeartbeat).getTime() > HEARTBEAT_STALE_THRESHOLD_MS
+      ) {
+        ctx.db.update(hosts)
+          .set({ status: "inactive", updatedAt: new Date() })
+          .where(eq(hosts.id, host.id))
+          .then(() => {})
+          .catch(() => {});
+        host.status = "inactive";
       }
 
       return host;
@@ -149,7 +163,7 @@ export const hostsRouter = router({
         conditions.push(sql`${hosts.pricePerMonth} <= ${filters.maxPrice}`);
       }
 
-      return ctx.db.query.hosts.findMany({
+      const results = await ctx.db.query.hosts.findMany({
         where: and(...conditions),
         orderBy: (hosts, { asc }) => [asc(hosts.pricePerMonth)],
         columns: {
@@ -164,8 +178,32 @@ export const hostsRouter = router({
           city: true,
           pricePerMonth: true,
           uptimePercent: true,
+          status: true,
+          lastHeartbeat: true,
         },
       });
+
+      // Lazy staleness check
+      const now = Date.now();
+      for (const host of results) {
+        if (
+          host.status === "active" &&
+          host.lastHeartbeat &&
+          now - new Date(host.lastHeartbeat).getTime() > HEARTBEAT_STALE_THRESHOLD_MS
+        ) {
+          // Fire-and-forget: mark as inactive
+          ctx.db.update(hosts)
+            .set({ status: "inactive", updatedAt: new Date() })
+            .where(eq(hosts.id, host.id))
+            .then(() => {})
+            .catch(() => {});
+          // Update the in-memory result too
+          host.status = "inactive";
+        }
+      }
+
+      // Filter out any hosts that became inactive
+      return results.filter(h => h.status === "active");
     }),
 
   // Get host stats (earnings, agent count, etc.)

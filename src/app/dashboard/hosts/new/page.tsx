@@ -50,21 +50,6 @@ export default function AddHostPage() {
   }, [hostData?.lastHeartbeat]);
 
   // ---- Auto-detect specs ----
-  const RAM_OPTIONS = [4, 8, 16, 32, 64, 128, 256];
-
-  function snapToNearestRam(gb: number): number {
-    let closest = RAM_OPTIONS[0]!;
-    let minDiff = Math.abs(gb - closest);
-    for (const opt of RAM_OPTIONS) {
-      const diff = Math.abs(gb - opt);
-      if (diff < minDiff) {
-        minDiff = diff;
-        closest = opt;
-      }
-    }
-    return closest;
-  }
-
   function detectOS(): string {
     const ua = navigator.userAgent;
     // macOS
@@ -103,27 +88,7 @@ export default function AddHostPage() {
     try {
       // CPU cores
       if (navigator.hardwareConcurrency) {
-        const cores = navigator.hardwareConcurrency;
-        // Snap to nearest option in the CPU select
-        const cpuOptions = [1, 2, 4, 6, 8, 12, 16, 24, 32, 64];
-        let bestCpu = cpuOptions[0]!;
-        let bestDiff = Math.abs(cores - bestCpu);
-        for (const opt of cpuOptions) {
-          const diff = Math.abs(cores - opt);
-          if (diff < bestDiff) {
-            bestDiff = diff;
-            bestCpu = opt;
-          }
-        }
-        setCpuCores(bestCpu);
-      }
-
-      // RAM (Chrome only)
-      const deviceMemory = (navigator as unknown as { deviceMemory?: number }).deviceMemory;
-      if (deviceMemory) {
-        setRamGb(snapToNearestRam(deviceMemory));
-      } else {
-        notices.push("RAM detection not supported in this browser");
+        setCpuCores(navigator.hardwareConcurrency);
       }
 
       // OS
@@ -144,8 +109,8 @@ export default function AddHostPage() {
       }
 
       const noticeStr = notices.length > 0
-        ? `✓ Specs detected — review and adjust if needed (${notices.join("; ")})`
-        : "✓ Specs detected — review and adjust if needed";
+        ? `✓ Specs detected — review and adjust if needed (${notices.join("; ")}). RAM and storage will be verified automatically when your daemon connects.`
+        : "✓ Specs detected — review and adjust if needed. RAM and storage will be verified automatically when your daemon connects.";
       setDetectNotice(noticeStr);
     } catch {
       setDetectNotice("⚠ Auto-detection failed — please fill in manually");
@@ -154,7 +119,7 @@ export default function AddHostPage() {
     }
   }
 
-  const canProceedStep1 = name.trim().length >= 1 && cpuCores > 0 && ramGb >= 4;
+  const canProceedStep1 = name.trim().length >= 1 && cpuCores > 0 && ramGb >= 1;
   const canProceedStep2 = pricePerMonth >= 500;
 
   const hostPayout = Math.round(pricePerMonth * 0.6); // 60%
@@ -313,49 +278,43 @@ export default function AddHostPage() {
                 <label className="block text-sm font-medium text-foreground mb-2">
                   CPU Cores *
                 </label>
-                <select
+                <input
+                  type="number"
                   value={cpuCores}
-                  onChange={(e) => setCpuCores(Number(e.target.value))}
+                  onChange={(e) => setCpuCores(Math.max(1, Math.round(Number(e.target.value) || 1)))}
+                  min={1}
+                  max={256}
+                  step={1}
                   className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  {[1, 2, 4, 6, 8, 12, 16, 24, 32, 64].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   RAM (GB) *
                 </label>
-                <select
+                <input
+                  type="number"
                   value={ramGb}
-                  onChange={(e) => setRamGb(Number(e.target.value))}
+                  onChange={(e) => setRamGb(Math.max(1, Math.round(Number(e.target.value) || 1)))}
+                  min={1}
+                  max={1024}
+                  step={1}
                   className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  {[4, 8, 16, 32, 64, 128, 256].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
                   Storage (GB)
                 </label>
-                <select
+                <input
+                  type="number"
                   value={storageGb}
-                  onChange={(e) => setStorageGb(Number(e.target.value))}
+                  onChange={(e) => setStorageGb(Math.max(10, Math.round(Number(e.target.value) || 10)))}
+                  min={10}
+                  max={100000}
+                  step={1}
                   className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  {[50, 100, 250, 500, 1000, 2000].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
             </div>
 
