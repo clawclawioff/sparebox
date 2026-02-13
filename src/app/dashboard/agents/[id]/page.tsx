@@ -7,13 +7,18 @@ import {
   ArrowLeft,
   Play,
   Square,
+  RotateCw,
   Trash2,
   Clock,
   Server,
   DollarSign,
   Copy,
+  Loader2,
+  Cpu,
+  MemoryStick,
 } from "lucide-react";
 import { useState } from "react";
+import { TIERS, type TierKey } from "@/lib/constants";
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -46,14 +51,40 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function TierBadge({ tier }: { tier: string | null | undefined }) {
+  if (!tier) return null;
+
+  const tierInfo = TIERS[tier as TierKey];
+  if (!tierInfo) return null;
+
+  const tierColors: Record<string, string> = {
+    lite: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+    standard: "bg-primary/10 text-primary border-primary/20",
+    pro: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+    compute: "bg-orange-500/10 text-orange-600 border-orange-500/20",
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+        tierColors[tier] || tierColors.standard
+      }`}
+    >
+      {tierInfo.name} Tier
+    </span>
+  );
+}
+
 function StatCard({
   label,
   value,
   icon: Icon,
+  subtext,
 }: {
   label: string;
   value: string | number;
   icon: React.ElementType;
+  subtext?: string;
 }) {
   return (
     <div className="bg-card border border-border rounded-xl p-5">
@@ -64,6 +95,9 @@ function StatCard({
         <div>
           <p className="text-xs text-muted-foreground">{label}</p>
           <p className="text-lg font-semibold text-foreground">{value}</p>
+          {subtext && (
+            <p className="text-xs text-muted-foreground">{subtext}</p>
+          )}
         </div>
       </div>
     </div>
@@ -74,22 +108,45 @@ export default function AgentDetailsPage() {
   const router = useRouter();
   const params = useParams();
   const agentId = params.id as string;
-  
+
   const [activeTab, setActiveTab] = useState<"overview" | "logs" | "config">(
     "overview"
   );
 
-  const { data: agent, isLoading, refetch } = trpc.agents.get.useQuery({
+  const utils = trpc.useUtils();
+
+  const {
+    data: agent,
+    isLoading,
+    refetch,
+  } = trpc.agents.get.useQuery({
     id: agentId,
   });
 
-  const stopAgent = trpc.agents.stop.useMutation({ onSuccess: () => refetch() });
+  const stopAgent = trpc.agents.stop.useMutation({
+    onSuccess: () => {
+      utils.agents.get.invalidate({ id: agentId });
+      utils.agents.list.invalidate();
+    },
+  });
   const startAgent = trpc.agents.start.useMutation({
-    onSuccess: () => refetch(),
+    onSuccess: () => {
+      utils.agents.get.invalidate({ id: agentId });
+      utils.agents.list.invalidate();
+    },
+  });
+  const restartAgent = trpc.agents.sendCommand.useMutation({
+    onSuccess: () => {
+      utils.agents.get.invalidate({ id: agentId });
+      utils.agents.list.invalidate();
+    },
   });
   const deleteAgent = trpc.agents.delete.useMutation({
     onSuccess: () => router.push("/dashboard/agents"),
   });
+
+  const isCommandPending =
+    stopAgent.isPending || startAgent.isPending || restartAgent.isPending;
 
   const handleStop = async () => {
     if (confirm("Are you sure you want to stop this agent?")) {
@@ -99,6 +156,12 @@ export default function AgentDetailsPage() {
 
   const handleStart = async () => {
     await startAgent.mutateAsync({ id: agentId });
+  };
+
+  const handleRestart = async () => {
+    if (confirm("Are you sure you want to restart this agent?")) {
+      await restartAgent.mutateAsync({ agentId, type: "restart" });
+    }
   };
 
   const handleDelete = async () => {
@@ -145,8 +208,12 @@ export default function AgentDetailsPage() {
 
   const host = (agent as any).host;
   const subscriptionsData = (agent as any).subscriptions || [];
-  const activeSubscription = subscriptionsData.find((s: any) => s.status === "active");
+  const activeSubscription = subscriptionsData.find(
+    (s: any) => s.status === "active"
+  );
   const monthlyCost = activeSubscription ? activeSubscription.pricePerMonth : 0;
+  const agentTier = (agent as any).tier as string | null;
+  const tierInfo = agentTier ? TIERS[agentTier as TierKey] : null;
 
   // Calculate uptime indicator based on lastActive
   const getUptimeDisplay = () => {
@@ -155,7 +222,7 @@ export default function AgentDetailsPage() {
     const now = new Date();
     const diffMs = now.getTime() - lastActiveDate.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    
+
     if (agent.status === "running") {
       if (diffMins < 5) return "Online";
       if (diffMins < 60) return `${diffMins}m ago`;
@@ -177,9 +244,10 @@ export default function AgentDetailsPage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold text-foreground">{agent.name}</h1>
             <StatusBadge status={agent.status} />
+            <TierBadge tier={agentTier} />
           </div>
           <p className="text-muted-foreground mt-1">
             {agent.lastActive
@@ -190,23 +258,50 @@ export default function AgentDetailsPage() {
 
         <div className="flex items-center gap-2">
           {agent.status === "running" ? (
-            <button
-              onClick={handleStop}
-              disabled={stopAgent.isPending}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition-colors"
-            >
-              <Square className="w-4 h-4" />
-              Stop
-            </button>
+            <>
+              <button
+                onClick={handleRestart}
+                disabled={isCommandPending}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition-colors disabled:opacity-50"
+              >
+                {restartAgent.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RotateCw className="w-4 h-4" />
+                )}
+                Restart
+              </button>
+              <button
+                onClick={handleStop}
+                disabled={isCommandPending}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-muted hover:bg-accent text-foreground rounded-lg transition-colors disabled:opacity-50"
+              >
+                {stopAgent.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Square className="w-4 h-4" />
+                )}
+                Stop
+              </button>
+            </>
           ) : agent.status === "stopped" ? (
             <button
               onClick={handleStart}
-              disabled={startAgent.isPending}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg transition-colors"
+              disabled={isCommandPending}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg transition-colors disabled:opacity-50"
             >
-              <Play className="w-4 h-4" />
+              {startAgent.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4" />
+              )}
               Start
             </button>
+          ) : agent.status === "deploying" ? (
+            <span className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/10 text-blue-600 rounded-lg text-sm font-medium">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Deploying...
+            </span>
           ) : null}
 
           <button
@@ -220,8 +315,20 @@ export default function AgentDetailsPage() {
         </div>
       </div>
 
+      {/* Command feedback */}
+      {(stopAgent.isError || startAgent.isError || restartAgent.isError) && (
+        <div className="status-error rounded-lg p-4 mb-6">
+          <p className="text-sm">
+            {stopAgent.error?.message ||
+              startAgent.error?.message ||
+              restartAgent.error?.message ||
+              "Command failed"}
+          </p>
+        </div>
+      )}
+
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <StatCard
           label="Status"
           value={getUptimeDisplay()}
@@ -234,9 +341,19 @@ export default function AgentDetailsPage() {
         />
         <StatCard
           label="Monthly Cost"
-          value={monthlyCost > 0 ? `$${(monthlyCost / 100).toFixed(2)}` : "N/A"}
+          value={
+            monthlyCost > 0 ? `$${(monthlyCost / 100).toFixed(2)}` : "N/A"
+          }
           icon={DollarSign}
         />
+        {tierInfo && (
+          <StatCard
+            label="Resources"
+            value={`${tierInfo.ramMb >= 1024 ? `${tierInfo.ramMb / 1024}GB` : `${tierInfo.ramMb}MB`} RAM`}
+            icon={MemoryStick}
+            subtext={`${tierInfo.cpuCores} CPU • ${tierInfo.diskGb}GB disk`}
+          />
+        )}
       </div>
 
       {/* Tabs */}
@@ -261,7 +378,9 @@ export default function AgentDetailsPage() {
         <div className="space-y-6">
           {/* Machine Info */}
           <div className="bg-card border border-border rounded-xl p-6">
-            <h3 className="font-semibold text-foreground mb-4">Host Information</h3>
+            <h3 className="font-semibold text-foreground mb-4">
+              Host Information
+            </h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-muted-foreground">Host</span>
@@ -281,10 +400,68 @@ export default function AgentDetailsPage() {
               </div>
               <div>
                 <span className="text-muted-foreground">Version</span>
-                <p className="text-foreground">{(agent as any).openclawVersion || "latest"}</p>
+                <p className="text-foreground">
+                  {(agent as any).openclawVersion || "latest"}
+                </p>
               </div>
+              {agentTier && (
+                <div>
+                  <span className="text-muted-foreground">Tier</span>
+                  <p className="text-foreground">
+                    {tierInfo?.name || agentTier} —{" "}
+                    <span className="text-muted-foreground">
+                      {tierInfo?.description}
+                    </span>
+                  </p>
+                </div>
+              )}
+              {(agent as any).containerId && (
+                <div>
+                  <span className="text-muted-foreground">Container</span>
+                  <p className="text-foreground font-mono text-xs">
+                    {((agent as any).containerId as string).slice(0, 12)}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Container Stats (if available) */}
+          {(agent as any).containerStats && (
+            <div className="bg-card border border-border rounded-xl p-6">
+              <h3 className="font-semibold text-foreground mb-4">
+                Container Stats
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {(agent as any).containerStats.cpuPercent !== undefined && (
+                  <div className="text-center">
+                    <Cpu className="w-5 h-5 text-muted-foreground mx-auto mb-1" />
+                    <p className="text-lg font-semibold text-foreground">
+                      {((agent as any).containerStats.cpuPercent as number).toFixed(
+                        1
+                      )}
+                      %
+                    </p>
+                    <p className="text-xs text-muted-foreground">CPU Usage</p>
+                  </div>
+                )}
+                {(agent as any).containerStats.ramUsageMb !== undefined && (
+                  <div className="text-center">
+                    <MemoryStick className="w-5 h-5 text-muted-foreground mx-auto mb-1" />
+                    <p className="text-lg font-semibold text-foreground">
+                      {(agent as any).containerStats.ramUsageMb}MB
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      RAM{" "}
+                      {tierInfo
+                        ? `/ ${tierInfo.ramMb}MB`
+                        : ""}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Connection Info - only show when agent is running */}
           {agent.status === "running" && (
@@ -292,7 +469,9 @@ export default function AgentDetailsPage() {
               <h3 className="font-semibold text-foreground mb-4">Connection</h3>
               <div className="space-y-4">
                 <div>
-                  <span className="text-sm text-muted-foreground">Agent ID</span>
+                  <span className="text-sm text-muted-foreground">
+                    Agent ID
+                  </span>
                   <div className="flex items-center gap-2 mt-1">
                     <code className="flex-1 bg-muted px-3 py-2 rounded-lg text-sm text-primary font-mono">
                       {agent.id}
@@ -306,7 +485,8 @@ export default function AgentDetailsPage() {
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Connection details will be available once the agent is fully deployed.
+                  Connection details will be available once the agent is fully
+                  deployed.
                 </p>
               </div>
             </div>
@@ -317,7 +497,9 @@ export default function AgentDetailsPage() {
       {activeTab === "logs" && (
         <div className="bg-card border border-border rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-foreground">Logs (Last 100 lines)</h3>
+            <h3 className="font-semibold text-foreground">
+              Logs (Last 100 lines)
+            </h3>
             <button className="text-sm text-primary hover:underline">
               Download Full
             </button>
@@ -341,7 +523,8 @@ export default function AgentDetailsPage() {
           </div>
           <div className="bg-muted rounded-lg p-4 font-mono text-xs text-foreground h-80 overflow-y-auto">
             <pre>
-              {(agent.config && Object.keys(agent.config as Record<string, unknown>).length > 0
+              {(agent.config &&
+                Object.keys(agent.config as Record<string, unknown>).length > 0
                 ? JSON.stringify(agent.config, null, 2)
                 : null) ||
                 `# openclaw.yaml

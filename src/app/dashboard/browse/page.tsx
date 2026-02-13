@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import Link from "next/link";
 import { useState } from "react";
 import { Server, MapPin, Cpu, HardDrive, Activity } from "lucide-react";
+import { TIERS, type TierKey } from "@/lib/constants";
 
 function LastSeenBadge({ lastHeartbeat }: { lastHeartbeat: Date | string | null | undefined }) {
   if (!lastHeartbeat) return null;
@@ -39,6 +40,58 @@ function LastSeenBadge({ lastHeartbeat }: { lastHeartbeat: Date | string | null 
       <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
       Last seen {relativeTime}
     </span>
+  );
+}
+
+function IsolationBadge({ mode }: { mode: string | null | undefined }) {
+  if (!mode || mode === "unknown") return null;
+
+  if (mode === "docker") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-600">
+        🐳 Docker
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600">
+      ⚠️ Limited
+    </span>
+  );
+}
+
+function TierPriceChips({ host }: { host: Record<string, unknown> }) {
+  const tierKeys: TierKey[] = ["lite", "standard", "pro", "compute"];
+  const priceFields: Record<TierKey, string> = {
+    lite: "priceLite",
+    standard: "priceStandard",
+    pro: "pricePro",
+    compute: "priceCompute",
+  };
+
+  const available = tierKeys.filter((t) => {
+    const val = host[priceFields[t]];
+    return typeof val === "number" && val > 0;
+  });
+
+  if (available.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-3">
+      {available.map((tier) => {
+        const price = host[priceFields[tier]] as number;
+        return (
+          <span
+            key={tier}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-foreground border border-border"
+          >
+            {TIERS[tier].name}:{" "}
+            <span className="text-primary">${(price / 100).toFixed(0)}/mo</span>
+          </span>
+        );
+      })}
+    </div>
   );
 }
 
@@ -133,74 +186,94 @@ export default function BrowseHostsPage() {
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">{hosts.length} hosts available</p>
           <div className="grid gap-4">
-            {hosts.map((host) => (
-              <div
-                key={host.id}
-                className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-colors"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <h3 className="font-semibold text-foreground text-lg">
-                        {host.name}
-                      </h3>
-                      <span className="text-primary font-semibold">
-                        ${((host.pricePerMonth || 0) / 100).toFixed(0)}/mo
-                      </span>
-                      <LastSeenBadge lastHeartbeat={(host as any).lastHeartbeat} />
-                    </div>
-                    
-                    {host.description && (
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {host.description}
-                      </p>
-                    )}
+            {hosts.map((host) => {
+              const hostAny = host as unknown as Record<string, unknown>;
+              const isolationMode = hostAny.isolationMode as string | null | undefined;
+              const maxAgents = hostAny.maxAgents as number | null | undefined;
+              const hostedAgentCount = Array.isArray(hostAny.agents)
+                ? (hostAny.agents as unknown[]).length
+                : null;
 
-                    <div className="flex flex-wrap items-center gap-4 mt-4 text-sm text-muted-foreground">
-                      {host.cpuCores && (
-                        <span className="flex items-center gap-1.5">
-                          <Cpu className="w-4 h-4" />
-                          {host.cpuCores} cores
+              return (
+                <div
+                  key={host.id}
+                  className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-colors"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <h3 className="font-semibold text-foreground text-lg">
+                          {host.name}
+                        </h3>
+                        <span className="text-primary font-semibold">
+                          ${((host.pricePerMonth || 0) / 100).toFixed(0)}/mo
                         </span>
+                        <LastSeenBadge lastHeartbeat={(host as any).lastHeartbeat} />
+                        <IsolationBadge mode={isolationMode} />
+                      </div>
+                      
+                      {host.description && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {host.description}
+                        </p>
                       )}
-                      {host.ramGb && (
-                        <span className="flex items-center gap-1.5">
-                          <Server className="w-4 h-4" />
-                          {host.ramGb}GB RAM
-                        </span>
-                      )}
-                      {host.storageGb && (
-                        <span className="flex items-center gap-1.5">
-                          <HardDrive className="w-4 h-4" />
-                          {host.storageGb}GB
-                        </span>
-                      )}
-                      {(host.city || host.region || host.country) && (
-                        <span className="flex items-center gap-1.5">
-                          <MapPin className="w-4 h-4" />
-                          {[host.city, host.region, host.country]
-                            .filter(Boolean)
-                            .join(", ")}
-                        </span>
-                      )}
-                      {host.uptimePercent && (
-                        <span className="flex items-center gap-1.5">
-                          <Activity className="w-4 h-4" />
-                          {host.uptimePercent.toFixed(1)}% uptime
-                        </span>
-                      )}
+
+                      <div className="flex flex-wrap items-center gap-4 mt-4 text-sm text-muted-foreground">
+                        {host.cpuCores && (
+                          <span className="flex items-center gap-1.5">
+                            <Cpu className="w-4 h-4" />
+                            {host.cpuCores} cores
+                          </span>
+                        )}
+                        {host.ramGb && (
+                          <span className="flex items-center gap-1.5">
+                            <Server className="w-4 h-4" />
+                            {host.ramGb}GB RAM
+                          </span>
+                        )}
+                        {host.storageGb && (
+                          <span className="flex items-center gap-1.5">
+                            <HardDrive className="w-4 h-4" />
+                            {host.storageGb}GB
+                          </span>
+                        )}
+                        {(host.city || host.region || host.country) && (
+                          <span className="flex items-center gap-1.5">
+                            <MapPin className="w-4 h-4" />
+                            {[host.city, host.region, host.country]
+                              .filter(Boolean)
+                              .join(", ")}
+                          </span>
+                        )}
+                        {host.uptimePercent && (
+                          <span className="flex items-center gap-1.5">
+                            <Activity className="w-4 h-4" />
+                            {host.uptimePercent.toFixed(1)}% uptime
+                          </span>
+                        )}
+                        {maxAgents && maxAgents > 0 && (
+                          <span className="flex items-center gap-1.5 text-xs">
+                            {hostedAgentCount !== null
+                              ? `${maxAgents - (hostedAgentCount as number)}/${maxAgents} slots`
+                              : `${maxAgents} slots`}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Per-tier pricing chips */}
+                      <TierPriceChips host={hostAny} />
                     </div>
+
+                    <Link
+                      href={`/dashboard/agents/new?hostId=${host.id}`}
+                      className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg transition-colors shrink-0"
+                    >
+                      Select
+                    </Link>
                   </div>
-
-                  <Link
-                    href={`/dashboard/agents/new?hostId=${host.id}`}
-                    className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg transition-colors shrink-0"
-                  >
-                    Select
-                  </Link>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

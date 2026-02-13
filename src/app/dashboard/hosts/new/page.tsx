@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Check, Copy, Loader2, Key, AlertTriangle, CheckCircle2, Cpu } from "lucide-react";
+import { TIERS, type TierKey } from "@/lib/constants";
 
 export default function AddHostPage() {
   const router = useRouter();
@@ -26,13 +27,27 @@ export default function AddHostPage() {
   const [city, setCity] = useState("");
   const [pricePerMonth, setPricePerMonth] = useState(1000); // cents
 
+  // Per-tier pricing (null = don't offer that tier)
+  const [priceLite, setPriceLite] = useState<number | null>(null);
+  const [priceStandard, setPriceStandard] = useState<number | null>(null);
+  const [pricePro, setPricePro] = useState<number | null>(null);
+  const [priceCompute, setPriceCompute] = useState<number | null>(null);
+
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectNotice, setDetectNotice] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
 
   const createHost = trpc.hosts.create.useMutation();
-  const generateApiKey = trpc.hosts.generateApiKey.useMutation();
+  const generateApiKeyMutation = trpc.hosts.generateApiKey.useMutation();
+
+  // Pre-fill Standard tier price when pricePerMonth changes (only if Standard is not manually set)
+  useEffect(() => {
+    if (priceStandard === null || priceStandard === 0) {
+      setPriceStandard(pricePerMonth);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Poll for daemon connection once we're on step 3
   const { data: hostData } = trpc.hosts.get.useQuery(
@@ -61,7 +76,6 @@ export default function AddHostPage() {
     }
     // Windows
     if (ua.includes("Windows NT 10.0")) {
-      // Windows 11 reports as NT 10.0 but with specific build numbers
       const buildMatch = ua.match(/Windows NT 10\.0.*?(\d{5,})/);
       if (buildMatch && parseInt(buildMatch[1]!, 10) >= 22000) {
         return "Windows 11";
@@ -140,13 +154,17 @@ export default function AddHostPage() {
         region: region.trim() || undefined,
         city: city.trim() || undefined,
         pricePerMonth,
+        priceLite: priceLite && priceLite > 0 ? priceLite : null,
+        priceStandard: priceStandard && priceStandard > 0 ? priceStandard : null,
+        pricePro: pricePro && pricePro > 0 ? pricePro : null,
+        priceCompute: priceCompute && priceCompute > 0 ? priceCompute : null,
       });
 
       setCreatedHostId(host.id);
 
       // Auto-generate API key
       try {
-        const keyResult = await generateApiKey.mutateAsync({ hostId: host.id });
+        const keyResult = await generateApiKeyMutation.mutateAsync({ hostId: host.id });
         setGeneratedApiKey(keyResult.apiKey);
       } catch (keyError: unknown) {
         const message = keyError instanceof Error ? keyError.message : "Failed to generate API key";
@@ -167,6 +185,27 @@ export default function AddHostPage() {
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
   };
+
+  // Helper to format cents to dollar display
+  const centsToDisplay = (cents: number | null): string => {
+    if (cents === null || cents === 0) return "";
+    return (cents / 100).toFixed(2);
+  };
+
+  // Helper to parse dollar input to cents
+  const parseDollarsToCents = (val: string): number | null => {
+    if (!val || val.trim() === "") return null;
+    const parsed = parseFloat(val);
+    if (isNaN(parsed) || parsed <= 0) return null;
+    return Math.round(parsed * 100);
+  };
+
+  const tierPriceInputs: { key: TierKey; price: number | null; setPrice: (v: number | null) => void }[] = [
+    { key: "lite", price: priceLite, setPrice: setPriceLite },
+    { key: "standard", price: priceStandard, setPrice: setPriceStandard },
+    { key: "pro", price: pricePro, setPrice: setPricePro },
+    { key: "compute", price: priceCompute, setPrice: setPriceCompute },
+  ];
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -352,7 +391,7 @@ export default function AddHostPage() {
             Step 2: Location & Pricing
           </h2>
           <p className="text-sm text-muted-foreground mb-6">
-            Set your location and monthly price
+            Set your location and monthly prices
           </p>
 
           {error && (
@@ -361,7 +400,7 @@ export default function AddHostPage() {
             </div>
           )}
 
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
@@ -407,9 +446,10 @@ export default function AddHostPage() {
               </div>
             </div>
 
+            {/* Default price */}
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
-                Monthly Price *
+                Default Monthly Price *
               </label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
@@ -418,9 +458,14 @@ export default function AddHostPage() {
                 <input
                   type="number"
                   value={(pricePerMonth / 100).toFixed(2)}
-                  onChange={(e) =>
-                    setPricePerMonth(Math.round(parseFloat(e.target.value) * 100) || 0)
-                  }
+                  onChange={(e) => {
+                    const cents = Math.round(parseFloat(e.target.value) * 100) || 0;
+                    setPricePerMonth(cents);
+                    // Auto-update Standard if it hasn't been manually changed
+                    if (priceStandard === null || priceStandard === pricePerMonth) {
+                      setPriceStandard(cents);
+                    }
+                  }}
                   min={5}
                   max={100}
                   step={0.5}
@@ -428,7 +473,7 @@ export default function AddHostPage() {
                 />
               </div>
               <p className="text-sm text-muted-foreground mt-2">
-                You'll receive{" "}
+                You&apos;ll receive{" "}
                 <span className="text-primary font-medium">
                   ${(hostPayout / 100).toFixed(2)}
                 </span>{" "}
@@ -437,6 +482,49 @@ export default function AddHostPage() {
               <p className="text-xs text-muted-foreground/70 mt-1">
                 Suggested: $10 - $15/month for {cpuCores} cores / {ramGb}GB RAM
               </p>
+            </div>
+
+            {/* Per-tier pricing */}
+            <div>
+              <h3 className="text-sm font-medium text-foreground mb-1">
+                Per-Tier Pricing
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">
+                Set specific prices for each resource tier. Leave blank to not offer that tier.
+              </p>
+
+              <div className="space-y-3">
+                {tierPriceInputs.map(({ key, price, setPrice }) => {
+                  const tier = TIERS[key];
+                  return (
+                    <div key={key} className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <label className="block text-sm text-foreground mb-1">
+                          <span className="font-medium">{tier.name}</span>
+                          <span className="text-muted-foreground ml-1.5 text-xs">
+                            ({tier.ramMb >= 1024 ? `${tier.ramMb / 1024}GB` : `${tier.ramMb}MB`} RAM, {tier.cpuCores} CPU, {tier.diskGb}GB disk)
+                          </span>
+                        </label>
+                      </div>
+                      <div className="relative w-32">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                          $
+                        </span>
+                        <input
+                          type="number"
+                          value={centsToDisplay(price)}
+                          onChange={(e) => setPrice(parseDollarsToCents(e.target.value))}
+                          placeholder="—"
+                          min={0}
+                          step={0.5}
+                          className="w-full bg-background border border-border rounded-lg pl-7 pr-3 py-2 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground w-8">/mo</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -587,7 +675,7 @@ export default function AddHostPage() {
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
                   <p className="text-sm text-foreground">
-                    <strong>Save your API key now</strong> — it won't be shown again. If you lose it, you can regenerate from the machine details page.
+                    <strong>Save your API key now</strong> — it won&apos;t be shown again. If you lose it, you can regenerate from the machine details page.
                   </p>
                 </div>
               </div>
