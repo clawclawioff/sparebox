@@ -13,6 +13,7 @@ set -euo pipefail
 SPAREBOX_DIR="\$HOME/.sparebox"
 DAEMON_URL="https://www.sparebox.dev/api/install/daemon"
 VERSION_URL="https://www.sparebox.dev/api/install/version"
+DAEMON_STARTED=false
 
 # Colors
 RED='\\033[0;31m'
@@ -96,6 +97,18 @@ configure_daemon() {
 }
 EOFCONF
         echo -e "\${GREEN}✓\${NC} Config saved to \$SPAREBOX_DIR/config.json"
+
+        # Auto-start daemon in background
+        echo ""
+        echo -e "\${BLUE}Starting daemon...\${NC}"
+        node "\$SPAREBOX_DIR/sparebox-daemon.cjs" > /dev/null 2>&1 &
+        DAEMON_PID=\$!
+        DAEMON_STARTED=true
+        echo -e "\${GREEN}✓\${NC} Daemon started (PID: \$DAEMON_PID)"
+        echo ""
+        echo "  Stop it:       kill \$DAEMON_PID  or  pkill -f sparebox-daemon"
+        echo "  View logs:     Run with output redirect:"
+        echo "                 node ~/.sparebox/sparebox-daemon.cjs > ~/.sparebox/daemon.log 2>&1 &"
     fi
 }
 
@@ -168,11 +181,17 @@ echo -e "\${GREEN}╔═══════════════════�
 echo -e "║         Installation Complete! ✓         ║"
 echo -e "╚══════════════════════════════════════════╝\${NC}"
 echo ""
-echo "To start manually:"
-echo "  node \$SPAREBOX_DIR/sparebox-daemon.cjs"
-echo ""
-echo "Dashboard: https://www.sparebox.dev/dashboard/hosts"
-echo "Docs:      https://www.sparebox.dev/install"
+if [ "\$DAEMON_STARTED" = true ]; then
+    echo -e "\${GREEN}✓ Daemon is running!\${NC}"
+    echo "  Dashboard: https://www.sparebox.dev/dashboard/hosts"
+    echo "  Logs:      https://www.sparebox.dev/install"
+else
+    echo "To start manually:"
+    echo "  node \$SPAREBOX_DIR/sparebox-daemon.cjs"
+    echo ""
+    echo "Dashboard: https://www.sparebox.dev/dashboard/hosts"
+    echo "Docs:      https://www.sparebox.dev/install"
+fi
 echo ""
 `;
 
