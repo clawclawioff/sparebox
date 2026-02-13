@@ -156,6 +156,38 @@ async function getDiskUsageWindows() {
     return -1;
   return Math.round((totalSize - freeSpace) / totalSize * 100);
 }
+async function getTotalDiskGb() {
+  try {
+    if (process.platform === "win32") {
+      return await getTotalDiskGbWindows();
+    }
+    return await getTotalDiskGbUnix();
+  } catch {
+    return -1;
+  }
+}
+async function getTotalDiskGbUnix() {
+  const output = await execPromise("df -k /");
+  const lines = output.trim().split("\n");
+  if (lines.length < 2)
+    return -1;
+  const parts = lines[1].trim().split(/\s+/);
+  const totalKb = parseInt(parts[1] ?? "", 10);
+  if (isNaN(totalKb) || totalKb === 0)
+    return -1;
+  return Math.round(totalKb / (1024 * 1024));
+}
+async function getTotalDiskGbWindows() {
+  const output = await execPromise(`wmic logicaldisk where "DeviceID='C:'" get Size /format:csv`);
+  const lines = output.trim().split("\n").filter((l) => l.trim().length > 0);
+  if (lines.length < 2)
+    return -1;
+  const parts = lines[lines.length - 1].trim().split(",");
+  const totalBytes = parseInt(parts[parts.length - 1] ?? "", 10);
+  if (isNaN(totalBytes) || totalBytes === 0)
+    return -1;
+  return Math.round(totalBytes / 1024 ** 3);
+}
 function getTotalRamGb() {
   return Math.round(os2.totalmem() / 1024 ** 3 * 10) / 10;
 }
@@ -242,7 +274,7 @@ function request(url, options, body) {
 }
 var startTime = Date.now();
 async function sendHeartbeat(config, daemonVersion) {
-  const [cpuUsage, diskUsage] = await Promise.all([getCpuUsage(), getDiskUsage()]);
+  const [cpuUsage, diskUsage, totalDiskGb] = await Promise.all([getCpuUsage(), getDiskUsage(), getTotalDiskGb()]);
   const ramUsage = getRamUsage();
   const payload = {
     cpuUsage,
@@ -255,6 +287,7 @@ async function sendHeartbeat(config, daemonVersion) {
     nodeVersion: process.version,
     uptime: Math.round((Date.now() - startTime) / 1e3),
     totalRamGb: getTotalRamGb(),
+    totalDiskGb: totalDiskGb >= 0 ? totalDiskGb : 0,
     cpuCores: getCpuCores(),
     cpuModel: getCpuModel()
   };

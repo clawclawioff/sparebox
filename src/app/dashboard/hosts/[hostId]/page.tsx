@@ -180,38 +180,21 @@ function AgentStatusBadge({ status }: { status: string }) {
 }
 
 function SpecValue({
-  label,
-  reportedValue,
-  verifiedValue,
+  value,
   unit,
   specsVerified,
 }: {
-  label: string;
-  reportedValue: number | string | null | undefined;
-  verifiedValue: number | string | null | undefined;
+  value: number | string | null | undefined;
   unit: string;
   specsVerified: boolean;
 }) {
-  if (!specsVerified || verifiedValue == null) {
-    return <span>{reportedValue ?? "—"}{unit}</span>;
-  }
-
-  const reported = String(reportedValue);
-  const verified = String(verifiedValue);
-  const match = reported === verified;
-
   return (
     <span className="inline-flex items-center gap-1.5 flex-wrap">
-      <span>{reportedValue}{unit}</span>
-      {match ? (
+      <span>{value ?? "—"}{unit}</span>
+      {specsVerified && (
         <span className="inline-flex items-center gap-0.5 text-green-600 text-xs font-medium">
           <Check className="w-3 h-3" />
-          verified
-        </span>
-      ) : (
-        <span className="inline-flex items-center gap-0.5 text-yellow-600 text-xs font-medium">
-          <AlertTriangle className="w-3 h-3" />
-          verified: {verifiedValue}{unit}
+          Verified
         </span>
       )}
     </span>
@@ -590,9 +573,7 @@ export default function HostDetailsPage() {
                 <span className="text-muted-foreground">CPU</span>
                 <p className="text-foreground">
                   <SpecValue
-                    label="CPU"
-                    reportedValue={host.cpuCores}
-                    verifiedValue={(host as any).verifiedCpuCores}
+                    value={host.cpuCores}
                     unit=" cores"
                     specsVerified={(host as any).specsVerified ?? false}
                   />
@@ -600,15 +581,19 @@ export default function HostDetailsPage() {
                 <span className="text-muted-foreground">RAM</span>
                 <p className="text-foreground">
                   <SpecValue
-                    label="RAM"
-                    reportedValue={host.ramGb}
-                    verifiedValue={(host as any).verifiedRamGb}
+                    value={host.ramGb}
                     unit=" GB"
                     specsVerified={(host as any).specsVerified ?? false}
                   />
                 </p>
                 <span className="text-muted-foreground">Storage</span>
-                <p className="text-foreground">{host.storageGb || "—"} GB</p>
+                <p className="text-foreground">
+                  <SpecValue
+                    value={host.storageGb}
+                    unit=" GB"
+                    specsVerified={(host as any).specsVerified ?? false}
+                  />
+                </p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -617,9 +602,10 @@ export default function HostDetailsPage() {
                 <span className="text-muted-foreground">Operating System</span>
                 <p className="text-foreground">
                   {host.osInfo || "Not specified"}
-                  {(host as any).specsVerified && (host as any).verifiedOsInfo && (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      (daemon: {(host as any).verifiedOsInfo})
+                  {(host as any).specsVerified && (
+                    <span className="ml-2 inline-flex items-center gap-0.5 text-green-600 text-xs font-medium">
+                      <Check className="w-3 h-3" />
+                      Verified
                     </span>
                   )}
                 </p>

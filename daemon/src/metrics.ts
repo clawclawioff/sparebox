@@ -124,6 +124,52 @@ async function getDiskUsageWindows(): Promise<number> {
 }
 
 // ---------------------------------------------------------------------------
+// Total Disk (GB)
+// ---------------------------------------------------------------------------
+
+/**
+ * Total disk space of the root partition in GB (rounded to nearest integer).
+ * Returns -1 if it can't be determined.
+ */
+export async function getTotalDiskGb(): Promise<number> {
+  try {
+    if (process.platform === "win32") {
+      return await getTotalDiskGbWindows();
+    }
+    return await getTotalDiskGbUnix();
+  } catch {
+    return -1;
+  }
+}
+
+async function getTotalDiskGbUnix(): Promise<number> {
+  const output = await execPromise("df -k /");
+  const lines = output.trim().split("\n");
+  if (lines.length < 2) return -1;
+
+  const parts = lines[1]!.trim().split(/\s+/);
+  // Column 1 is total 1K-blocks
+  const totalKb = parseInt(parts[1] ?? "", 10);
+  if (isNaN(totalKb) || totalKb === 0) return -1;
+
+  return Math.round(totalKb / (1024 * 1024)); // KB -> GB
+}
+
+async function getTotalDiskGbWindows(): Promise<number> {
+  const output = await execPromise(
+    'wmic logicaldisk where "DeviceID=\'C:\'" get Size /format:csv'
+  );
+  const lines = output.trim().split("\n").filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return -1;
+
+  const parts = lines[lines.length - 1]!.trim().split(",");
+  const totalBytes = parseInt(parts[parts.length - 1] ?? "", 10);
+  if (isNaN(totalBytes) || totalBytes === 0) return -1;
+
+  return Math.round(totalBytes / (1024 ** 3));
+}
+
+// ---------------------------------------------------------------------------
 // Total RAM (GB)
 // ---------------------------------------------------------------------------
 

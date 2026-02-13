@@ -2,7 +2,7 @@ import * as https from "node:https";
 import * as http from "node:http";
 import { URL } from "node:url";
 import { log } from "./log.js";
-import { getCpuUsage, getRamUsage, getDiskUsage, getOsInfo, getTotalRamGb, getCpuCores, getCpuModel } from "./metrics.js";
+import { getCpuUsage, getRamUsage, getDiskUsage, getOsInfo, getTotalRamGb, getTotalDiskGb, getCpuCores, getCpuModel } from "./metrics.js";
 // ---------------------------------------------------------------------------
 // Backoff state
 // ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ function request(url, options, body) {
 const startTime = Date.now();
 export async function sendHeartbeat(config, daemonVersion) {
     // Collect metrics (CPU sampling takes ~1s)
-    const [cpuUsage, diskUsage] = await Promise.all([getCpuUsage(), getDiskUsage()]);
+    const [cpuUsage, diskUsage, totalDiskGb] = await Promise.all([getCpuUsage(), getDiskUsage(), getTotalDiskGb()]);
     const ramUsage = getRamUsage();
     const payload = {
         cpuUsage,
@@ -73,6 +73,7 @@ export async function sendHeartbeat(config, daemonVersion) {
         nodeVersion: process.version,
         uptime: Math.round((Date.now() - startTime) / 1000),
         totalRamGb: getTotalRamGb(),
+        totalDiskGb: totalDiskGb >= 0 ? totalDiskGb : 0,
         cpuCores: getCpuCores(),
         cpuModel: getCpuModel(),
     };

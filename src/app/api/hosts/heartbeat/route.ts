@@ -52,6 +52,7 @@ const heartbeatSchema = z.object({
   tailscaleIp: z.string().max(45).optional(),
   // Hardware spec verification fields (reported by daemon)
   totalRamGb: z.number().min(0).optional(),
+  totalDiskGb: z.number().min(0).optional(),
   cpuCores: z.number().int().min(1).optional(),
   cpuModel: z.string().max(200).optional(),
 });
@@ -169,15 +170,57 @@ export async function POST(req: NextRequest) {
     });
 
     if (hostRecord && !hostRecord.specsVerified) {
+      // Overwrite user-inputted specs with daemon-reported values
+      const specUpdate: Record<string, unknown> = {
+        // Overwrite main columns
+        cpuCores: data.cpuCores,
+        ramGb: Math.round(data.totalRamGb),
+        osInfo: data.osInfo || null,
+        // Keep verified_* as audit trail
+        specsVerified: true,
+        verifiedCpuCores: data.cpuCores,
+        verifiedRamGb: Math.round(data.totalRamGb),
+        verifiedOsInfo: data.osInfo || null,
+        verifiedAt: new Date(),
+      };
+
+      // Overwrite storage if daemon reported it
+      if (data.totalDiskGb !== undefined && data.totalDiskGb > 0) {
+        specUpdate.storageGb = Math.round(data.totalDiskGb);
+      }
+
+      // Location verification via IP geolocation
+      try {
+        const forwarded = req.headers.get("x-forwarded-for");
+        const clientIp = forwarded ? forwarded.split(",")[0]!.trim() : null;
+
+        if (clientIp && clientIp !== "127.0.0.1" && clientIp !== "::1") {
+          const geoRes = await fetch(`https://ipapi.co/${clientIp}/json/`, {
+            signal: AbortSignal.timeout(5000),
+          });
+
+          if (geoRes.ok) {
+            const geo = (await geoRes.json()) as {
+              country_name?: string;
+              region?: string;
+              city?: string;
+              error?: boolean;
+            };
+
+            if (!geo.error) {
+              if (geo.country_name) specUpdate.country = geo.country_name;
+              if (geo.region) specUpdate.region = geo.region;
+              if (geo.city) specUpdate.city = geo.city;
+            }
+          }
+        }
+      } catch {
+        // Geolocation failure is non-critical — keep existing values
+      }
+
       await db
         .update(hosts)
-        .set({
-          specsVerified: true,
-          verifiedCpuCores: data.cpuCores,
-          verifiedRamGb: Math.round(data.totalRamGb),
-          verifiedOsInfo: data.osInfo || null,
-          verifiedAt: new Date(),
-        })
+        .set(specUpdate)
         .where(eq(hosts.id, keyRecord.hostId));
     }
   }
