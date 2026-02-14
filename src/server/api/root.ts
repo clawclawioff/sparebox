@@ -6,6 +6,7 @@ import { waitlistRouter } from "./routers/waitlist";
 import { preferencesRouter } from "./routers/preferences";
 import { billingRouter } from "./routers/billing";
 import { connectRouter } from "./routers/connect";
+import { messagesRouter } from "./routers/messages";
 
 export const appRouter = router({
   hosts: hostsRouter,
@@ -15,6 +16,7 @@ export const appRouter = router({
   preferences: preferencesRouter,
   billing: billingRouter,
   connect: connectRouter,
+  messages: messagesRouter,
 });
 
 export type AppRouter = typeof appRouter;

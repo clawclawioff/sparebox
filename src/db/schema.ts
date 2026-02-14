@@ -285,6 +285,22 @@ export const agentCommands = pgTable("agent_commands", {
   error: text("error"),
 });
 
+// Agent Messages (chat between deployer and running agent)
+export const agentMessages = pgTable("agent_messages", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agents.id, { onDelete: "cascade" }),
+  // "user" = from deployer, "agent" = from openclaw agent, "system" = system event
+  role: text("role").notNull().default("user"),
+  content: text("content").notNull(),
+  // pending = awaiting agent response, delivered = sent to daemon, responded = agent replied
+  status: text("status").notNull().default("pending"),
+  deliveredAt: timestamp("delivered_at"),
+  respondedAt: timestamp("responded_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Waitlist (email capture for early access)
 export const waitlist = pgTable("waitlist", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -328,6 +344,7 @@ export const agentsRelations = relations(agents, ({ one, many }) => ({
   host: one(hosts, { fields: [agents.hostId], references: [hosts.id] }),
   subscriptions: many(subscriptions),
   commands: many(agentCommands),
+  messages: many(agentMessages),
 }));
 
 export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
@@ -351,6 +368,10 @@ export const hostApiKeysRelations = relations(hostApiKeys, ({ one }) => ({
 export const agentCommandsRelations = relations(agentCommands, ({ one }) => ({
   agent: one(agents, { fields: [agentCommands.agentId], references: [agents.id] }),
   host: one(hosts, { fields: [agentCommands.hostId], references: [hosts.id] }),
+}));
+
+export const agentMessagesRelations = relations(agentMessages, ({ one }) => ({
+  agent: one(agents, { fields: [agentMessages.agentId], references: [agents.id] }),
 }));
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({

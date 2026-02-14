@@ -10,10 +10,18 @@ import {
   getAgentStatuses,
   getAgentCount,
   getIsolationMode,
+  getAgentRecordsForMessaging,
   type Command,
   type CommandAck,
   type AgentStatus,
 } from "./agent-manager.js";
+import {
+  processMessages,
+  drainMessageResponses,
+  queueMessageResponses,
+  type IncomingMessage,
+  type MessageResponse,
+} from "./message-handler.js";
 import type { DaemonConfig } from "./config.js";
 
 // ---------------------------------------------------------------------------
@@ -37,12 +45,14 @@ export interface HeartbeatPayload {
   isolationMode: string;
   openclawVersion: string;
   commandAcks: CommandAck[];
+  messageResponses: MessageResponse[];
 }
 
 export interface HeartbeatResponse {
   ok: boolean;
   ts: number;
   commands: Command[];
+  messages: IncomingMessage[];
   nextHeartbeatMs: number;
 }
 
@@ -156,8 +166,9 @@ export async function sendHeartbeat(
   ]);
   const ramUsage = getRamUsage();
 
-  // Drain pending command acks
+  // Drain pending command acks and message responses
   const commandAcks = drainAcks();
+  const messageResponses = drainMessageResponses();
 
   const payload: HeartbeatPayload = {
     cpuUsage,
@@ -176,6 +187,7 @@ export async function sendHeartbeat(
     isolationMode: getIsolationMode(),
     openclawVersion,
     commandAcks,
+    messageResponses,
   };
 
   const url = `${config.apiUrl}/api/hosts/heartbeat`;
@@ -195,9 +207,10 @@ export async function sendHeartbeat(
       const data = JSON.parse(res.body) as HeartbeatResponse;
 
       const ackInfo = commandAcks.length > 0 ? `, sent ${commandAcks.length} ack(s)` : "";
+      const msgInfo = messageResponses.length > 0 ? `, sent ${messageResponses.length} msg response(s)` : "";
       log(
         "INFO",
-        `Heartbeat sent (CPU: ${cpuUsage}%, RAM: ${ramUsage}%, Disk: ${diskUsage === -1 ? "N/A" : diskUsage + "%"}, agents: ${getAgentCount()}${ackInfo})`
+        `Heartbeat sent (CPU: ${cpuUsage}%, RAM: ${ramUsage}%, Disk: ${diskUsage === -1 ? "N/A" : diskUsage + "%"}, agents: ${getAgentCount()}${ackInfo}${msgInfo})`
       );
 
       // Process incoming commands
@@ -217,14 +230,25 @@ export async function sendHeartbeat(
           });
       }
 
+      // Process incoming messages (chat from deployer)
+      if (data.messages && data.messages.length > 0) {
+        log("INFO", `Received ${data.messages.length} message(s) from platform`);
+        const agentRecords = getAgentRecordsForMessaging();
+        processMessages(data.messages, agentRecords).catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          log("ERROR", `Message processing failed: ${msg}`);
+        });
+      }
+
       return data;
     }
 
     if (res.statusCode === 401 || res.statusCode === 403) {
       log("ERROR", `Authentication failed (${res.statusCode}). Check your API key.`);
       log("ERROR", "Heartbeats stopped — fix your API key and restart the daemon.");
-      // Re-queue acks so they aren't lost
+      // Re-queue acks and message responses so they aren't lost
       if (commandAcks.length > 0) queueAcks(commandAcks);
+      if (messageResponses.length > 0) queueMessageResponses(messageResponses);
       return null; // Signal caller to stop
     }
 
@@ -232,34 +256,36 @@ export async function sendHeartbeat(
       const retryAfter = res.headers["retry-after"];
       const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : nextBackoff();
       log("WARN", `Rate limited (429). Retrying in ${Math.round(waitMs / 1000)}s`);
-      // Re-queue acks so they aren't lost
       if (commandAcks.length > 0) queueAcks(commandAcks);
+      if (messageResponses.length > 0) queueMessageResponses(messageResponses);
       await sleep(waitMs);
-      return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: waitMs };
+      return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: waitMs };
     }
 
     if (res.statusCode >= 500) {
       const wait = nextBackoff();
       log("WARN", `Server error (${res.statusCode}). Retrying in ${Math.round(wait / 1000)}s`);
       if (commandAcks.length > 0) queueAcks(commandAcks);
+      if (messageResponses.length > 0) queueMessageResponses(messageResponses);
       await sleep(wait);
-      return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: wait };
+      return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: wait };
     }
 
     // Unexpected status
     log("WARN", `Unexpected response: ${res.statusCode} — ${res.body.slice(0, 200)}`);
     if (commandAcks.length > 0) queueAcks(commandAcks);
+    if (messageResponses.length > 0) queueMessageResponses(messageResponses);
     const wait = nextBackoff();
     await sleep(wait);
-    return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: wait };
+    return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: wait };
   } catch (err) {
     const wait = nextBackoff();
     const msg = err instanceof Error ? err.message : String(err);
     log("WARN", `Heartbeat failed: ${msg} — retrying in ${Math.round(wait / 1000)}s (attempt ${consecutiveFailures})`);
-    // Re-queue acks on failure so they aren't lost
     if (commandAcks.length > 0) queueAcks(commandAcks);
+    if (messageResponses.length > 0) queueMessageResponses(messageResponses);
     await sleep(wait);
-    return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: wait };
+    return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: wait };
   }
 }
 

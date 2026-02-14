@@ -16,8 +16,13 @@ import {
   Loader2,
   Cpu,
   MemoryStick,
+  Send,
+  MessageSquare,
+  Bot,
+  User,
+  AlertCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { TIERS, type TierKey } from "@/lib/constants";
 
 function StatusBadge({ status }: { status: string }) {
@@ -76,6 +81,244 @@ function TierBadge({ tier }: { tier: string | null | undefined }) {
   );
 }
 
+// ============================================================================
+// Agent Chat Component
+// ============================================================================
+
+function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: string }) {
+  const [input, setInput] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [lastPollTime, setLastPollTime] = useState<string | undefined>(undefined);
+
+  // Fetch message history
+  const { data: messages, refetch: refetchMessages } = trpc.messages.list.useQuery(
+    { agentId, limit: 50 },
+    { enabled: !!agentId }
+  );
+
+  // Poll for new messages every 3 seconds
+  const { data: newMessages } = trpc.messages.poll.useQuery(
+    { agentId, since: lastPollTime },
+    {
+      enabled: !!agentId && !!lastPollTime,
+      refetchInterval: 3000,
+    }
+  );
+
+  // Send message mutation
+  const sendMessage = trpc.messages.send.useMutation({
+    onSuccess: () => {
+      setInput("");
+      setIsSending(false);
+      refetchMessages();
+    },
+    onError: () => {
+      setIsSending(false);
+    },
+  });
+
+  // Update last poll time when messages load
+  useEffect(() => {
+    if (messages && messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg) {
+        setLastPollTime(new Date(lastMsg.createdAt).toISOString());
+      }
+    }
+  }, [messages]);
+
+  // Refetch when new messages arrive from polling
+  useEffect(() => {
+    if (newMessages && newMessages.length > 0) {
+      refetchMessages();
+      const lastMsg = newMessages[newMessages.length - 1];
+      if (lastMsg) {
+        setLastPollTime(new Date(lastMsg.createdAt).toISOString());
+      }
+    }
+  }, [newMessages, refetchMessages]);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSend = useCallback(() => {
+    const trimmed = input.trim();
+    if (!trimmed || isSending) return;
+
+    setIsSending(true);
+    sendMessage.mutate({ agentId, content: trimmed });
+  }, [input, isSending, agentId, sendMessage]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }, [handleSend]);
+
+  const isAgentOnline = agentStatus === "running";
+
+  return (
+    <div className="bg-card border border-border rounded-xl flex flex-col" style={{ height: "70vh" }}>
+      {/* Chat header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="w-4 h-4 text-primary" />
+          <h3 className="font-semibold text-foreground">Chat with Agent</h3>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span
+            className={`w-2 h-2 rounded-full ${
+              isAgentOnline ? "bg-green-500" : "bg-muted-foreground"
+            }`}
+          />
+          {isAgentOnline ? "Online" : "Offline"}
+          {isAgentOnline && (
+            <span className="text-muted-foreground/60">
+              · Responses may take up to 60s
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        {!messages || messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-4">
+              <Bot className="w-8 h-8 text-primary" />
+            </div>
+            <p className="text-foreground font-medium">Start a conversation</p>
+            <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+              Send a message to interact with your deployed OpenClaw agent.
+              Messages are delivered via the host daemon.
+            </p>
+          </div>
+        ) : (
+          <>
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex gap-3 ${
+                  msg.role === "user" ? "justify-end" : "justify-start"
+                }`}
+              >
+                {msg.role !== "user" && (
+                  <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 mt-1">
+                    {msg.role === "agent" ? (
+                      <Bot className="w-4 h-4 text-primary" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </div>
+                )}
+                <div
+                  className={`max-w-[75%] rounded-2xl px-4 py-3 ${
+                    msg.role === "user"
+                      ? "bg-primary text-primary-foreground rounded-br-md"
+                      : msg.role === "agent"
+                      ? "bg-muted text-foreground rounded-bl-md"
+                      : "bg-yellow-500/10 text-yellow-700 rounded-bl-md border border-yellow-500/20"
+                  }`}
+                >
+                  <p className="text-sm whitespace-pre-wrap break-words">
+                    {msg.content}
+                  </p>
+                  <div
+                    className={`flex items-center gap-2 mt-1.5 text-[10px] ${
+                      msg.role === "user"
+                        ? "text-primary-foreground/60 justify-end"
+                        : "text-muted-foreground/60"
+                    }`}
+                  >
+                    <span>
+                      {new Date(msg.createdAt).toLocaleTimeString(undefined, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                    {msg.role === "user" && (
+                      <span>
+                        {msg.status === "pending"
+                          ? "⏳ Pending"
+                          : msg.status === "delivered"
+                          ? "✓ Delivered"
+                          : msg.status === "responded"
+                          ? "✓✓"
+                          : ""}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {msg.role === "user" && (
+                  <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center shrink-0 mt-1">
+                    <User className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                )}
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </>
+        )}
+      </div>
+
+      {/* Input area */}
+      <div className="px-6 py-4 border-t border-border">
+        {!isAgentOnline ? (
+          <div className="flex items-center gap-3 bg-muted rounded-xl px-4 py-3">
+            <AlertCircle className="w-5 h-5 text-muted-foreground shrink-0" />
+            <p className="text-sm text-muted-foreground">
+              Agent is not running. Start it to send messages.
+            </p>
+          </div>
+        ) : (
+          <div className="flex items-end gap-3">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type a message..."
+              rows={1}
+              disabled={isSending}
+              className="flex-1 bg-background border border-border rounded-xl px-4 py-3 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none text-sm min-h-[44px] max-h-32"
+              style={{
+                height: "auto",
+                overflowY: input.split("\n").length > 3 ? "auto" : "hidden",
+              }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = "auto";
+                target.style.height = Math.min(target.scrollHeight, 128) + "px";
+              }}
+            />
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || isSending}
+              className="w-11 h-11 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground text-primary-foreground rounded-xl flex items-center justify-center transition-colors shrink-0"
+            >
+              {isSending ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Send className="w-5 h-5" />
+              )}
+            </button>
+          </div>
+        )}
+        {sendMessage.error && (
+          <p className="text-xs text-destructive mt-2">
+            {sendMessage.error.message}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function StatCard({
   label,
   value,
@@ -110,7 +353,7 @@ export default function AgentDetailsPage() {
   const params = useParams();
   const agentId = params.id as string;
 
-  const [activeTab, setActiveTab] = useState<"overview" | "logs" | "config">(
+  const [activeTab, setActiveTab] = useState<"overview" | "chat" | "logs" | "config">(
     "overview"
   );
 
@@ -359,7 +602,7 @@ export default function AgentDetailsPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6">
-        {(["overview", "logs", "config"] as const).map((tab) => (
+        {(["overview", "chat", "logs", "config"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -369,7 +612,14 @@ export default function AgentDetailsPage() {
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {tab === "chat" ? (
+              <span className="flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5" />
+                Chat
+              </span>
+            ) : (
+              tab.charAt(0).toUpperCase() + tab.slice(1)
+            )}
           </button>
         ))}
       </div>
@@ -493,6 +743,10 @@ export default function AgentDetailsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === "chat" && (
+        <AgentChat agentId={agentId} agentStatus={agent.status} />
       )}
 
       {activeTab === "logs" && (

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+#!/usr/bin/env node
 "use strict";
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -544,6 +545,20 @@ function getIsolationMode() {
 function getAgentCount() {
   return agents.size;
 }
+function getAgentRecordsForMessaging() {
+  const result = /* @__PURE__ */ new Map();
+  for (const [id, agent] of agents) {
+    if (agent.status === "running") {
+      result.set(id, {
+        containerId: agent.containerId,
+        pid: agent.pid,
+        isolation: agent.isolation,
+        port: agent.port
+      });
+    }
+  }
+  return result;
+}
 async function processCommands(commands) {
   const acks = [];
   for (const cmd of commands) {
@@ -963,6 +978,152 @@ function sleep2(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// src/message-handler.ts
+var import_node_child_process4 = require("node:child_process");
+var pendingResponses = [];
+function drainMessageResponses() {
+  const responses = [...pendingResponses];
+  pendingResponses = [];
+  return responses;
+}
+function queueMessageResponses(responses) {
+  pendingResponses.push(...responses);
+}
+function run3(cmd, args2, timeoutMs = 12e4) {
+  return new Promise((resolve, reject) => {
+    (0, import_node_child_process4.execFile)(cmd, args2, {
+      timeout: timeoutMs,
+      maxBuffer: 5 * 1024 * 1024,
+      // 5MB for long responses
+      env: { ...process.env }
+    }, (err, stdout, stderr) => {
+      if (err) {
+        reject(new Error(`${cmd} failed: ${err.message}
+stderr: ${stderr}`));
+      } else {
+        resolve({ stdout: stdout ?? "", stderr: stderr ?? "" });
+      }
+    });
+  });
+}
+async function processMessages(messages, agentRecords) {
+  for (const msg of messages) {
+    handleMessage(msg, agentRecords).catch((err) => {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      log("ERROR", `Message ${msg.id} for agent ${msg.agentId} failed: ${errMsg}`);
+      pendingResponses.push({
+        messageId: msg.id,
+        agentId: msg.agentId,
+        content: `[System] Failed to deliver message to agent: ${errMsg}`
+      });
+    });
+  }
+}
+async function handleMessage(msg, agentRecords) {
+  const agent = agentRecords.get(msg.agentId);
+  if (!agent) {
+    log("WARN", `Message for unknown agent ${msg.agentId} \u2014 skipping`);
+    pendingResponses.push({
+      messageId: msg.id,
+      agentId: msg.agentId,
+      content: "[System] Agent not found on this host."
+    });
+    return;
+  }
+  if (agent.isolation === "docker" && agent.containerId) {
+    await handleDockerMessage(msg, agent.containerId);
+  } else if (agent.isolation === "profile") {
+    await handleProfileMessage(msg, msg.agentId);
+  } else {
+    log("WARN", `Agent ${msg.agentId} has unsupported isolation: ${agent.isolation}`);
+    pendingResponses.push({
+      messageId: msg.id,
+      agentId: msg.agentId,
+      content: "[System] Agent isolation mode does not support messaging."
+    });
+  }
+}
+async function handleDockerMessage(msg, containerId) {
+  const runtime = await detectRuntime();
+  if (!runtime) {
+    throw new Error("No container runtime available");
+  }
+  log("INFO", `Sending message to Docker agent ${msg.agentId} (${containerId.slice(0, 12)})`);
+  const sessionId = `sparebox-chat-${msg.agentId.slice(0, 12)}`;
+  try {
+    const { stdout, stderr } = await run3(runtime, [
+      "exec",
+      containerId,
+      "openclaw",
+      "agent",
+      "--session-id",
+      sessionId,
+      "--message",
+      msg.content,
+      "--json",
+      "--timeout",
+      "90"
+    ], 12e4);
+    const response = parseAgentResponse(stdout);
+    log("INFO", `Agent ${msg.agentId} responded (${response.length} chars)`);
+    pendingResponses.push({
+      messageId: msg.id,
+      agentId: msg.agentId,
+      content: response
+    });
+  } catch (err) {
+    throw new Error(`Docker exec failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+async function handleProfileMessage(msg, agentId) {
+  const bin = await findOpenclawBinary();
+  if (!bin) {
+    throw new Error("openclaw binary not found");
+  }
+  const profileName = `sparebox-agent-${agentId.slice(0, 8)}`;
+  const sessionId = `sparebox-chat-${agentId.slice(0, 12)}`;
+  log("INFO", `Sending message to profile agent ${agentId} (${profileName})`);
+  try {
+    const { stdout, stderr } = await run3(bin, [
+      "--profile",
+      profileName,
+      "agent",
+      "--session-id",
+      sessionId,
+      "--message",
+      msg.content,
+      "--json",
+      "--timeout",
+      "90"
+    ], 12e4);
+    const response = parseAgentResponse(stdout);
+    log("INFO", `Agent ${agentId} responded (${response.length} chars)`);
+    pendingResponses.push({
+      messageId: msg.id,
+      agentId,
+      content: response
+    });
+  } catch (err) {
+    throw new Error(`Profile agent exec failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+function parseAgentResponse(stdout) {
+  const trimmed = stdout.trim();
+  try {
+    const data = JSON.parse(trimmed);
+    if (data.reply) return data.reply;
+    if (data.text) return data.text;
+    if (data.content) return data.content;
+    if (data.message) return data.message;
+    if (data.output) return data.output;
+    if (typeof data === "string") return data;
+    return JSON.stringify(data, null, 2);
+  } catch {
+    if (trimmed.length > 0) return trimmed;
+    return "[Agent returned empty response]";
+  }
+}
+
 // src/heartbeat.ts
 var MIN_BACKOFF_MS = 1e3;
 var MAX_BACKOFF_MS = 3e5;
@@ -1034,6 +1195,7 @@ async function sendHeartbeat(config, daemonVersion) {
   ]);
   const ramUsage = getRamUsage();
   const commandAcks = drainAcks();
+  const messageResponses = drainMessageResponses();
   const payload = {
     cpuUsage,
     ramUsage,
@@ -1050,7 +1212,8 @@ async function sendHeartbeat(config, daemonVersion) {
     cpuModel: getCpuModel(),
     isolationMode: getIsolationMode(),
     openclawVersion,
-    commandAcks
+    commandAcks,
+    messageResponses
   };
   const url = `${config.apiUrl}/api/hosts/heartbeat`;
   const body = JSON.stringify(payload);
@@ -1064,9 +1227,10 @@ async function sendHeartbeat(config, daemonVersion) {
       resetBackoff();
       const data = JSON.parse(res.body);
       const ackInfo = commandAcks.length > 0 ? `, sent ${commandAcks.length} ack(s)` : "";
+      const msgInfo = messageResponses.length > 0 ? `, sent ${messageResponses.length} msg response(s)` : "";
       log(
         "INFO",
-        `Heartbeat sent (CPU: ${cpuUsage}%, RAM: ${ramUsage}%, Disk: ${diskUsage === -1 ? "N/A" : diskUsage + "%"}, agents: ${getAgentCount()}${ackInfo})`
+        `Heartbeat sent (CPU: ${cpuUsage}%, RAM: ${ramUsage}%, Disk: ${diskUsage === -1 ? "N/A" : diskUsage + "%"}, agents: ${getAgentCount()}${ackInfo}${msgInfo})`
       );
       if (data.commands && data.commands.length > 0) {
         log("INFO", `Received ${data.commands.length} command(s) from platform`);
@@ -1080,12 +1244,21 @@ async function sendHeartbeat(config, daemonVersion) {
           log("ERROR", `Command processing failed: ${msg}`);
         });
       }
+      if (data.messages && data.messages.length > 0) {
+        log("INFO", `Received ${data.messages.length} message(s) from platform`);
+        const agentRecords = getAgentRecordsForMessaging();
+        processMessages(data.messages, agentRecords).catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          log("ERROR", `Message processing failed: ${msg}`);
+        });
+      }
       return data;
     }
     if (res.statusCode === 401 || res.statusCode === 403) {
       log("ERROR", `Authentication failed (${res.statusCode}). Check your API key.`);
       log("ERROR", "Heartbeats stopped \u2014 fix your API key and restart the daemon.");
       if (commandAcks.length > 0) queueAcks(commandAcks);
+      if (messageResponses.length > 0) queueMessageResponses(messageResponses);
       return null;
     }
     if (res.statusCode === 429) {
@@ -1093,28 +1266,32 @@ async function sendHeartbeat(config, daemonVersion) {
       const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1e3 : nextBackoff();
       log("WARN", `Rate limited (429). Retrying in ${Math.round(waitMs / 1e3)}s`);
       if (commandAcks.length > 0) queueAcks(commandAcks);
+      if (messageResponses.length > 0) queueMessageResponses(messageResponses);
       await sleep3(waitMs);
-      return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: waitMs };
+      return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: waitMs };
     }
     if (res.statusCode >= 500) {
       const wait2 = nextBackoff();
       log("WARN", `Server error (${res.statusCode}). Retrying in ${Math.round(wait2 / 1e3)}s`);
       if (commandAcks.length > 0) queueAcks(commandAcks);
+      if (messageResponses.length > 0) queueMessageResponses(messageResponses);
       await sleep3(wait2);
-      return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: wait2 };
+      return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: wait2 };
     }
     log("WARN", `Unexpected response: ${res.statusCode} \u2014 ${res.body.slice(0, 200)}`);
     if (commandAcks.length > 0) queueAcks(commandAcks);
+    if (messageResponses.length > 0) queueMessageResponses(messageResponses);
     const wait = nextBackoff();
     await sleep3(wait);
-    return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: wait };
+    return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: wait };
   } catch (err) {
     const wait = nextBackoff();
     const msg = err instanceof Error ? err.message : String(err);
     log("WARN", `Heartbeat failed: ${msg} \u2014 retrying in ${Math.round(wait / 1e3)}s (attempt ${consecutiveFailures})`);
     if (commandAcks.length > 0) queueAcks(commandAcks);
+    if (messageResponses.length > 0) queueMessageResponses(messageResponses);
     await sleep3(wait);
-    return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: wait };
+    return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: wait };
   }
 }
 var running = false;

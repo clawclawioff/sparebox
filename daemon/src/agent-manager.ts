@@ -166,6 +166,24 @@ export function getAgentCount(): number {
   return agents.size;
 }
 
+/**
+ * Get agent records for message handling (reduced info for message-handler module).
+ */
+export function getAgentRecordsForMessaging(): Map<string, { containerId: string | null; pid: number | null; isolation: string; port: number }> {
+  const result = new Map<string, { containerId: string | null; pid: number | null; isolation: string; port: number }>();
+  for (const [id, agent] of agents) {
+    if (agent.status === "running") {
+      result.set(id, {
+        containerId: agent.containerId,
+        pid: agent.pid,
+        isolation: agent.isolation,
+        port: agent.port,
+      });
+    }
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Command processing
 // ---------------------------------------------------------------------------
