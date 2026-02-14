@@ -191,14 +191,15 @@ export async function POST(req: NextRequest) {
     })
     .where(eq(hosts.id, keyRecord.hostId));
 
-  // Only change status to active if currently inactive or pending (not suspended)
+  // Only change status to active if currently inactive (not pending or suspended)
+  // Pending hosts must be approved by admin before going active
   await db
     .update(hosts)
     .set({ status: "active" })
     .where(
       and(
         eq(hosts.id, keyRecord.hostId),
-        inArray(hosts.status, ["inactive", "pending"])
+        eq(hosts.status, "inactive")
       )
     );
 

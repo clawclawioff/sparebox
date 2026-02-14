@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   ChevronDown,
+  Shield,
 } from "lucide-react";
 import { SpareboxLogo } from "@/components/sparebox-logo";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -62,6 +63,8 @@ const navItems: NavItem[] = [
   // Host routes
   { href: "/dashboard/hosts", label: "My Machines", icon: Server, roles: ["host"] },
   { href: "/dashboard/earnings", label: "Earnings", icon: DollarSign, roles: ["host"] },
+  // Admin routes
+  { href: "/dashboard/admin", label: "Admin", icon: Shield, roles: ["admin"] },
   // Common routes
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];

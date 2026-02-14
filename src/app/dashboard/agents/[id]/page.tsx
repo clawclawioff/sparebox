@@ -89,11 +89,17 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [lastPollTime, setLastPollTime] = useState<string | undefined>(undefined);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
-  // Fetch message history
-  const { data: messages, refetch: refetchMessages } = trpc.messages.list.useQuery(
+  // Fetch message history with cursor-based pagination
+  const {
+    data: messageData,
+    refetch: refetchMessages,
+    isLoading: isLoadingMessages,
+  } = trpc.messages.list.useQuery(
     { agentId, limit: 50 },
     { enabled: !!agentId }
   );
@@ -112,6 +118,7 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
     onSuccess: () => {
       setInput("");
       setIsSending(false);
+      setShouldAutoScroll(true);
       refetchMessages();
     },
     onError: () => {
@@ -119,9 +126,19 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
     },
   });
 
+  // Clear chat mutation
+  const clearChat = trpc.messages.clear.useMutation({
+    onSuccess: () => {
+      refetchMessages();
+      setLastPollTime(undefined);
+    },
+  });
+
+  const messages = messageData?.messages ?? [];
+
   // Update last poll time when messages load
   useEffect(() => {
-    if (messages && messages.length > 0) {
+    if (messages.length > 0) {
       const lastMsg = messages[messages.length - 1];
       if (lastMsg) {
         setLastPollTime(new Date(lastMsg.createdAt).toISOString());
@@ -140,10 +157,20 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
     }
   }, [newMessages, refetchMessages]);
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom only if user is near bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (shouldAutoScroll) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, shouldAutoScroll]);
+
+  // Track scroll position to decide auto-scroll
+  const handleScroll = useCallback(() => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    setShouldAutoScroll(nearBottom);
+  }, []);
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
@@ -162,6 +189,24 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
 
   const isAgentOnline = agentStatus === "running";
 
+  // Group messages by date for separators
+  const messagesWithDates = messages.reduce<
+    Array<{ type: "date"; date: string } | { type: "message"; msg: (typeof messages)[0] }>
+  >((acc, msg) => {
+    const dateStr = new Date(msg.createdAt).toLocaleDateString(undefined, {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    const lastItem = acc[acc.length - 1];
+    if (!lastItem || (lastItem.type === "date" && lastItem.date !== dateStr) || (lastItem.type === "message" && new Date(lastItem.msg.createdAt).toLocaleDateString() !== new Date(msg.createdAt).toLocaleDateString())) {
+      acc.push({ type: "date", date: dateStr });
+    }
+    acc.push({ type: "message", msg });
+    return acc;
+  }, []);
+
   return (
     <div className="bg-card border border-border rounded-xl flex flex-col" style={{ height: "70vh" }}>
       {/* Chat header */}
@@ -170,24 +215,62 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
           <MessageSquare className="w-4 h-4 text-primary" />
           <h3 className="font-semibold text-foreground">Chat with Agent</h3>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span
-            className={`w-2 h-2 rounded-full ${
-              isAgentOnline ? "bg-green-500" : "bg-muted-foreground"
-            }`}
-          />
-          {isAgentOnline ? "Online" : "Offline"}
-          {isAgentOnline && (
-            <span className="text-muted-foreground/60">
-              · Responses may take up to 60s
-            </span>
+        <div className="flex items-center gap-3">
+          {messages.length > 0 && (
+            <button
+              onClick={() => {
+                if (confirm("Clear all chat messages? This cannot be undone.")) {
+                  clearChat.mutate({ agentId });
+                }
+              }}
+              disabled={clearChat.isPending}
+              className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+            >
+              Clear chat
+            </button>
           )}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isAgentOnline ? "bg-green-500" : "bg-muted-foreground"
+              }`}
+            />
+            {isAgentOnline ? "Online" : "Offline"}
+            {isAgentOnline && (
+              <span className="text-muted-foreground/60">
+                · Responses may take up to 60s
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-        {!messages || messages.length === 0 ? (
+      <div
+        ref={chatContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-6 py-4 space-y-4"
+      >
+        {/* Load older messages button */}
+        {messageData?.hasMore && (
+          <div className="flex justify-center pb-2">
+            <button
+              onClick={() => {
+                // Load older messages — for now, increase limit
+                // TODO: implement proper cursor loading
+              }}
+              className="text-xs text-primary hover:text-primary/80 transition-colors"
+            >
+              Load older messages
+            </button>
+          </div>
+        )}
+
+        {isLoadingMessages ? (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-4">
               <Bot className="w-8 h-8 text-primary" />
@@ -200,67 +283,88 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
           </div>
         ) : (
           <>
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex gap-3 ${
-                  msg.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                {msg.role !== "user" && (
-                  <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 mt-1">
-                    {msg.role === "agent" ? (
-                      <Bot className="w-4 h-4 text-primary" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 text-muted-foreground" />
-                    )}
+            {messagesWithDates.map((item, i) => {
+              if (item.type === "date") {
+                return (
+                  <div key={`date-${item.date}`} className="flex items-center gap-3 py-2">
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {item.date}
+                    </span>
+                    <div className="flex-1 h-px bg-border" />
                   </div>
-                )}
+                );
+              }
+
+              const msg = item.msg;
+              return (
                 <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-3 ${
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-md"
-                      : msg.role === "agent"
-                      ? "bg-muted text-foreground rounded-bl-md"
-                      : "bg-yellow-500/10 text-yellow-700 rounded-bl-md border border-yellow-500/20"
+                  key={msg.id}
+                  className={`flex gap-3 ${
+                    msg.role === "user" ? "justify-end" : "justify-start"
                   }`}
                 >
-                  <p className="text-sm whitespace-pre-wrap break-words">
-                    {msg.content}
-                  </p>
+                  {msg.role !== "user" && (
+                    <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 mt-1">
+                      {msg.role === "agent" ? (
+                        <Bot className="w-4 h-4 text-primary" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-muted-foreground" />
+                      )}
+                    </div>
+                  )}
                   <div
-                    className={`flex items-center gap-2 mt-1.5 text-[10px] ${
+                    className={`max-w-[75%] rounded-2xl px-4 py-3 ${
                       msg.role === "user"
-                        ? "text-primary-foreground/60 justify-end"
-                        : "text-muted-foreground/60"
+                        ? msg.status === "failed"
+                          ? "bg-destructive/10 text-destructive border border-destructive/20 rounded-br-md"
+                          : "bg-primary text-primary-foreground rounded-br-md"
+                        : msg.role === "agent"
+                          ? "bg-muted text-foreground rounded-bl-md"
+                          : "bg-yellow-500/10 text-yellow-700 rounded-bl-md border border-yellow-500/20"
                     }`}
                   >
-                    <span>
-                      {new Date(msg.createdAt).toLocaleTimeString(undefined, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                    {msg.role === "user" && (
+                    <p className="text-sm whitespace-pre-wrap break-words">
+                      {msg.content}
+                    </p>
+                    <div
+                      className={`flex items-center gap-2 mt-1.5 text-[10px] ${
+                        msg.role === "user"
+                          ? msg.status === "failed"
+                            ? "text-destructive/60 justify-end"
+                            : "text-primary-foreground/60 justify-end"
+                          : "text-muted-foreground/60"
+                      }`}
+                    >
                       <span>
-                        {msg.status === "pending"
-                          ? "⏳ Pending"
-                          : msg.status === "delivered"
-                          ? "✓ Delivered"
-                          : msg.status === "responded"
-                          ? "✓✓"
-                          : ""}
+                        {new Date(msg.createdAt).toLocaleTimeString(undefined, {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </span>
-                    )}
+                      {msg.role === "user" && (
+                        <span>
+                          {msg.status === "pending"
+                            ? "⏳ Pending"
+                            : msg.status === "delivered"
+                              ? "✓ Delivered"
+                              : msg.status === "responded"
+                                ? "✓✓"
+                                : msg.status === "failed"
+                                  ? "✕ Failed"
+                                  : ""}
+                        </span>
+                      )}
+                    </div>
                   </div>
+                  {msg.role === "user" && (
+                    <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center shrink-0 mt-1">
+                      <User className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  )}
                 </div>
-                {msg.role === "user" && (
-                  <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center shrink-0 mt-1">
-                    <User className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
             <div ref={messagesEndRef} />
           </>
         )}

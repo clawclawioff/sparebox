@@ -111,6 +111,28 @@ export const hostsRouter = router({
         .values(values)
         .returning();
 
+      // Notify admin about new pending host (fire-and-forget)
+      (async () => {
+        try {
+          const { sendNewHostPendingEmail } = await import("@/lib/email/notifications");
+          // Find admin users
+          const admins = await ctx.db.query.user.findMany({
+            where: eq(user.role, "admin"),
+            columns: { email: true },
+          });
+          for (const admin of admins) {
+            await sendNewHostPendingEmail(admin.email, {
+              hostName: host.name,
+              hostId: host.id,
+              ownerEmail: ctx.user.email,
+              ownerName: ctx.user.name,
+            });
+          }
+        } catch (err) {
+          console.error("[email] Failed to send new host pending notification:", err);
+        }
+      })();
+
       return host;
     }),
 

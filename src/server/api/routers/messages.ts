@@ -1,11 +1,16 @@
 import { z } from "zod";
 import { router, protectedProcedure } from "../trpc";
 import { TRPCError } from "@trpc/server";
-import { agentMessages, agents } from "@/db";
-import { eq, and, desc, gt } from "drizzle-orm";
+import { agentMessages, agents } from "@/db/schema";
+import { eq, and, desc, gt, lt, asc, sql, inArray } from "drizzle-orm";
+
+/** Messages older than 5 minutes in "delivered" status are marked failed */
+const MESSAGE_TIMEOUT_MS = 5 * 60 * 1000;
 
 export const messagesRouter = router({
+  // =========================================================================
   // Send a message to an agent (deployer → agent)
+  // =========================================================================
   send: protectedProcedure
     .input(
       z.object({
@@ -44,13 +49,15 @@ export const messagesRouter = router({
       return message;
     }),
 
-  // Get message history for an agent
+  // =========================================================================
+  // Get message history with cursor-based pagination
+  // =========================================================================
   list: protectedProcedure
     .input(
       z.object({
         agentId: z.string().uuid(),
         limit: z.number().int().min(1).max(100).default(50),
-        after: z.string().uuid().optional(), // cursor for pagination
+        cursor: z.string().uuid().optional(), // message ID to load before
       })
     )
     .query(async ({ ctx, input }) => {
@@ -66,28 +73,38 @@ export const messagesRouter = router({
 
       const conditions = [eq(agentMessages.agentId, input.agentId)];
 
-      // If cursor provided, get messages after that one
-      if (input.after) {
+      // If cursor provided, get messages OLDER than cursor
+      if (input.cursor) {
         const cursorMsg = await ctx.db.query.agentMessages.findFirst({
-          where: eq(agentMessages.id, input.after),
+          where: eq(agentMessages.id, input.cursor),
           columns: { createdAt: true },
         });
         if (cursorMsg) {
-          conditions.push(gt(agentMessages.createdAt, cursorMsg.createdAt));
+          conditions.push(lt(agentMessages.createdAt, cursorMsg.createdAt));
         }
       }
 
+      // Fetch limit + 1 to check if there are more
       const messages = await ctx.db.query.agentMessages.findMany({
         where: and(...conditions),
         orderBy: [desc(agentMessages.createdAt)],
-        limit: input.limit,
+        limit: input.limit + 1,
       });
 
+      const hasMore = messages.length > input.limit;
+      if (hasMore) messages.pop();
+
       // Return in chronological order
-      return messages.reverse();
+      return {
+        messages: messages.reverse(),
+        hasMore,
+        nextCursor: hasMore ? messages[0]?.id : undefined,
+      };
     }),
 
-  // Poll for new messages (used by deployer UI for "real-time" feel)
+  // =========================================================================
+  // Poll for new messages (real-time polling)
+  // =========================================================================
   poll: protectedProcedure
     .input(
       z.object({
@@ -106,6 +123,9 @@ export const messagesRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Agent not found" });
       }
 
+      // Expire stuck messages (fire-and-forget, best-effort)
+      void expireStuckMessages(ctx.db, input.agentId).catch(() => {});
+
       const conditions = [eq(agentMessages.agentId, input.agentId)];
 
       if (input.since) {
@@ -114,10 +134,57 @@ export const messagesRouter = router({
 
       const messages = await ctx.db.query.agentMessages.findMany({
         where: and(...conditions),
-        orderBy: [desc(agentMessages.createdAt)],
+        orderBy: [asc(agentMessages.createdAt)],
         limit: 50,
       });
 
-      return messages.reverse();
+      return messages;
+    }),
+
+  // =========================================================================
+  // Clear chat history
+  // =========================================================================
+  clear: protectedProcedure
+    .input(z.object({ agentId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      // Verify agent ownership
+      const agent = await ctx.db.query.agents.findFirst({
+        where: eq(agents.id, input.agentId),
+        columns: { userId: true },
+      });
+
+      if (!agent || agent.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agent not found" });
+      }
+
+      await ctx.db
+        .delete(agentMessages)
+        .where(eq(agentMessages.agentId, input.agentId));
+
+      return { success: true };
     }),
 });
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Expire messages stuck in "delivered" status for longer than MESSAGE_TIMEOUT_MS.
+ * Called during poll to self-heal without needing a separate cron.
+ */
+async function expireStuckMessages(db: any, agentId: string) {
+  const expiryDate = new Date(Date.now() - MESSAGE_TIMEOUT_MS);
+
+  await db
+    .update(agentMessages)
+    .set({ status: "failed" })
+    .where(
+      and(
+        eq(agentMessages.agentId, agentId),
+        eq(agentMessages.role, "user"),
+        eq(agentMessages.status, "delivered"),
+        lt(agentMessages.deliveredAt, expiryDate)
+      )
+    );
+}
