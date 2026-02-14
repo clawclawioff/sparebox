@@ -36,12 +36,16 @@ const heartbeatSchema = z.object({
   agentStatuses: z
     .array(
       z.object({
-        id: z.string().optional(),
-        name: z.string(),
-        status: z.enum(["running", "stopped", "error"]),
+        agentId: z.string(),
+        containerId: z.string().nullable().optional(),
+        name: z.string().optional(), // backwards compat
+        status: z.enum(["running", "stopped", "error", "deploying"]),
         uptimeSeconds: z.number().min(0).optional(),
         cpuPercent: z.number().min(0).max(100).optional(),
         ramMb: z.number().min(0).optional(),
+        ramUsageMb: z.number().min(0).optional(),
+        ramLimitMb: z.number().min(0).optional(),
+        port: z.number().int().positive().optional(),
       })
     )
     .default([]),

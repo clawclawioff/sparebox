@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Check, Copy, Loader2, Key, AlertTriangle, CheckCircle2, Cpu } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, Loader2, Key, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { TIERS, type TierKey } from "@/lib/constants";
 
 export default function AddHostPage() {
@@ -18,10 +18,6 @@ export default function AddHostPage() {
   // Form state
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [cpuCores, setCpuCores] = useState(4);
-  const [ramGb, setRamGb] = useState(16);
-  const [storageGb, setStorageGb] = useState(100);
-  const [osInfo, setOsInfo] = useState("");
   const [country, setCountry] = useState("US");
   const [region, setRegion] = useState("");
   const [city, setCity] = useState("");
@@ -33,7 +29,7 @@ export default function AddHostPage() {
   const [pricePro, setPricePro] = useState<number | null>(null);
   const [priceCompute, setPriceCompute] = useState<number | null>(null);
 
-  const [isDetecting, setIsDetecting] = useState(false);
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [detectNotice, setDetectNotice] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
@@ -64,76 +60,30 @@ export default function AddHostPage() {
     }
   }, [hostData?.lastHeartbeat]);
 
-  // ---- Auto-detect specs ----
-  function detectOS(): string {
-    const ua = navigator.userAgent;
-    // macOS
-    const macMatch = ua.match(/Mac OS X ([\d_.]+)/);
-    if (macMatch) {
-      const ver = macMatch[1]!.replace(/_/g, ".");
-      const major = parseInt(ver.split(".")[0]!, 10);
-      return `macOS ${major >= 20 ? ver : ver}`;
-    }
-    // Windows
-    if (ua.includes("Windows NT 10.0")) {
-      const buildMatch = ua.match(/Windows NT 10\.0.*?(\d{5,})/);
-      if (buildMatch && parseInt(buildMatch[1]!, 10) >= 22000) {
-        return "Windows 11";
-      }
-      return "Windows 10";
-    }
-    const winMatch = ua.match(/Windows NT ([\d.]+)/);
-    if (winMatch) return `Windows NT ${winMatch[1]}`;
-    // Linux
-    if (ua.includes("Linux")) {
-      const distro = ua.match(/(Ubuntu|Fedora|Debian|Arch|CentOS)/i);
-      return distro ? `Linux (${distro[1]})` : "Linux";
-    }
-    // ChromeOS
-    if (ua.includes("CrOS")) return "ChromeOS";
-    return "";
-  }
-
-  async function handleAutoDetect() {
-    setIsDetecting(true);
+  // ---- Auto-detect location via IP ----
+  async function handleDetectLocation() {
+    setIsDetectingLocation(true);
     setDetectNotice("");
-    const notices: string[] = [];
 
     try {
-      // CPU cores
-      if (navigator.hardwareConcurrency) {
-        setCpuCores(navigator.hardwareConcurrency);
+      const res = await fetch("https://ipapi.co/json/");
+      if (res.ok) {
+        const geo = await res.json();
+        if (geo.country_code) setCountry(geo.country_code);
+        if (geo.region) setRegion(geo.region);
+        if (geo.city) setCity(geo.city);
+        setDetectNotice("✓ Location detected from your IP address");
+      } else {
+        setDetectNotice("⚠ Location detection failed — please fill in manually");
       }
-
-      // OS
-      const os = detectOS();
-      if (os) setOsInfo(os);
-
-      // Location via IP geolocation
-      try {
-        const res = await fetch("https://ipapi.co/json/");
-        if (res.ok) {
-          const geo = await res.json();
-          if (geo.country_code) setCountry(geo.country_code);
-          if (geo.region) setRegion(geo.region);
-          if (geo.city) setCity(geo.city);
-        }
-      } catch {
-        notices.push("Location detection failed");
-      }
-
-      const noticeStr = notices.length > 0
-        ? `✓ Specs detected — review and adjust if needed (${notices.join("; ")}). RAM and storage will be verified automatically when your daemon connects.`
-        : "✓ Specs detected — review and adjust if needed. RAM and storage will be verified automatically when your daemon connects.";
-      setDetectNotice(noticeStr);
     } catch {
-      setDetectNotice("⚠ Auto-detection failed — please fill in manually");
+      setDetectNotice("⚠ Location detection failed — please fill in manually");
     } finally {
-      setIsDetecting(false);
+      setIsDetectingLocation(false);
     }
   }
 
-  const canProceedStep1 = name.trim().length >= 1 && cpuCores > 0 && ramGb >= 1;
+  const canProceedStep1 = name.trim().length >= 1;
   const canProceedStep2 = pricePerMonth >= 500;
 
   const hostPayout = Math.round(pricePerMonth * 0.6); // 60%
@@ -146,10 +96,6 @@ export default function AddHostPage() {
       const host = await createHost.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
-        cpuCores,
-        ramGb,
-        storageGb,
-        osInfo: osInfo.trim() || undefined,
         country: country || undefined,
         region: region.trim() || undefined,
         city: city.trim() || undefined,
@@ -246,44 +192,15 @@ export default function AddHostPage() {
         ))}
       </div>
 
-      {/* Step 1: Machine Details */}
+      {/* Step 1: Name & Location */}
       {step === 1 && (
         <div className="bg-card border border-border rounded-xl p-6">
           <h2 className="text-lg font-semibold text-foreground mb-1">
-            Step 1: Machine Details
+            Step 1: Name &amp; Location
           </h2>
           <p className="text-sm text-muted-foreground mb-4">
-            Tell us about your hardware
+            Give your machine a name and set its location. Hardware specs will be auto-detected when the daemon connects.
           </p>
-
-          {/* Auto-detect button */}
-          <button
-            onClick={handleAutoDetect}
-            disabled={isDetecting}
-            className="inline-flex items-center gap-2 px-4 py-2 mb-4 bg-primary/10 hover:bg-primary/20 text-primary font-medium rounded-lg transition-colors border border-primary/20 disabled:opacity-50"
-          >
-            {isDetecting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Detecting...
-              </>
-            ) : (
-              <>
-                <Cpu className="w-4 h-4" />
-                Auto-detect specs
-              </>
-            )}
-          </button>
-
-          {detectNotice && (
-            <div className={`rounded-lg p-3 mb-4 text-sm ${
-              detectNotice.startsWith("✓")
-                ? "bg-green-500/10 text-green-700 border border-green-500/20"
-                : "bg-yellow-500/10 text-yellow-700 border border-yellow-500/20"
-            }`}>
-              {detectNotice}
-            </div>
-          )}
 
           <div className="space-y-4">
             <div>
@@ -312,62 +229,82 @@ export default function AddHostPage() {
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  CPU Cores *
+            {/* Location fields */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-foreground">
+                  Location
                 </label>
-                <input
-                  type="number"
-                  value={cpuCores}
-                  onChange={(e) => setCpuCores(Math.max(1, Math.round(Number(e.target.value) || 1)))}
-                  min={1}
-                  max={256}
-                  step={1}
-                  className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
+                <button
+                  onClick={handleDetectLocation}
+                  disabled={isDetectingLocation}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary/10 hover:bg-primary/20 text-primary font-medium rounded-lg transition-colors border border-primary/20 disabled:opacity-50"
+                >
+                  {isDetectingLocation ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Detecting...
+                    </>
+                  ) : (
+                    "Auto-detect location"
+                  )}
+                </button>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  RAM (GB) *
-                </label>
-                <input
-                  type="number"
-                  value={ramGb}
-                  onChange={(e) => setRamGb(Math.max(1, Math.round(Number(e.target.value) || 1)))}
-                  min={1}
-                  max={1024}
-                  step={1}
-                  className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Storage (GB)
-                </label>
-                <input
-                  type="number"
-                  value={storageGb}
-                  onChange={(e) => setStorageGb(Math.max(10, Math.round(Number(e.target.value) || 10)))}
-                  min={10}
-                  max={100000}
-                  step={1}
-                  className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
+
+              {detectNotice && (
+                <div className={`rounded-lg p-3 mb-3 text-sm ${
+                  detectNotice.startsWith("✓")
+                    ? "bg-green-500/10 text-green-700 border border-green-500/20"
+                    : "bg-yellow-500/10 text-yellow-700 border border-yellow-500/20"
+                }`}>
+                  {detectNotice}
+                </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Country</label>
+                  <select
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="US">United States</option>
+                    <option value="CA">Canada</option>
+                    <option value="GB">United Kingdom</option>
+                    <option value="DE">Germany</option>
+                    <option value="FR">France</option>
+                    <option value="AU">Australia</option>
+                    <option value="JP">Japan</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Region/State</label>
+                  <input
+                    type="text"
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    placeholder="California"
+                    className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">City</label>
+                  <input
+                    type="text"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="San Francisco"
+                    className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
-                Operating System
-              </label>
-              <input
-                type="text"
-                value={osInfo}
-                onChange={(e) => setOsInfo(e.target.value)}
-                placeholder="Ubuntu 22.04 LTS"
-                className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
+            <div className="bg-muted/50 border border-border rounded-lg p-4">
+              <p className="text-sm text-muted-foreground">
+                💡 <strong>CPU, RAM, storage, and OS</strong> are automatically detected when your daemon connects. No need to enter them manually.
+              </p>
             </div>
           </div>
 
@@ -384,14 +321,14 @@ export default function AddHostPage() {
         </div>
       )}
 
-      {/* Step 2: Location & Pricing */}
+      {/* Step 2: Pricing */}
       {step === 2 && (
         <div className="bg-card border border-border rounded-xl p-6">
           <h2 className="text-lg font-semibold text-foreground mb-1">
-            Step 2: Location & Pricing
+            Step 2: Pricing
           </h2>
           <p className="text-sm text-muted-foreground mb-6">
-            Set your location and monthly prices
+            Set your monthly prices per tier
           </p>
 
           {error && (
@@ -401,51 +338,6 @@ export default function AddHostPage() {
           )}
 
           <div className="space-y-6">
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Country
-                </label>
-                <select
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="US">United States</option>
-                  <option value="CA">Canada</option>
-                  <option value="GB">United Kingdom</option>
-                  <option value="DE">Germany</option>
-                  <option value="FR">France</option>
-                  <option value="AU">Australia</option>
-                  <option value="JP">Japan</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Region/State
-                </label>
-                <input
-                  type="text"
-                  value={region}
-                  onChange={(e) => setRegion(e.target.value)}
-                  placeholder="California"
-                  className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  City
-                </label>
-                <input
-                  type="text"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  placeholder="San Francisco"
-                  className="w-full bg-background border border-border rounded-lg px-4 py-2.5 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-            </div>
-
             {/* Default price */}
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
@@ -480,7 +372,7 @@ export default function AddHostPage() {
                 (60%) per subscription
               </p>
               <p className="text-xs text-muted-foreground/70 mt-1">
-                Suggested: $10 - $15/month for {cpuCores} cores / {ramGb}GB RAM
+                Suggested: $5 - $15/month depending on tier and resources
               </p>
             </div>
 

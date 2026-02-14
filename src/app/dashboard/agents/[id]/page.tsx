@@ -284,7 +284,7 @@ export default function AgentDetailsPage() {
                 Stop
               </button>
             </>
-          ) : agent.status === "stopped" ? (
+          ) : agent.status === "stopped" || agent.status === "failed" ? (
             <button
               onClick={handleStart}
               disabled={isCommandPending}

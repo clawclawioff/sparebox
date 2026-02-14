@@ -13,6 +13,11 @@ export const hostsRouter = router({
     return ctx.db.query.hosts.findMany({
       where: eq(hosts.userId, ctx.user.id),
       orderBy: (hosts, { desc }) => [desc(hosts.createdAt)],
+      with: {
+        agents: {
+          columns: { id: true, name: true, status: true, tier: true },
+        },
+      },
     });
   }),
 
@@ -214,6 +219,12 @@ export const hostsRouter = router({
           country: true,
           city: true,
           pricePerMonth: true,
+          priceLite: true,
+          priceStandard: true,
+          pricePro: true,
+          priceCompute: true,
+          maxAgents: true,
+          isolationMode: true,
           uptimePercent: true,
           status: true,
           lastHeartbeat: true,
@@ -275,24 +286,25 @@ export const hostsRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Host not found" });
       }
 
-      // Get hosted agent count
+      // Get hosted agents
       const hostedAgents = await ctx.db.query.agents.findMany({
         where: eq(agents.hostId, input.id),
       });
 
-      // Get current month earnings from subscriptions
-      const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      
-      const activeSubscriptions = await ctx.db.query.subscriptions.findMany({
-        where: and(
-          eq(subscriptions.hostId, input.id),
-          eq(subscriptions.status, "active")
-        ),
+      // Get ALL subscriptions for this host (not just active) for total earnings
+      const allSubscriptions = await ctx.db.query.subscriptions.findMany({
+        where: eq(subscriptions.hostId, input.id),
       });
 
-      // Calculate monthly earnings (host's 60% cut)
+      // Monthly earnings from active subscriptions only
+      const activeSubscriptions = allSubscriptions.filter(s => s.status === "active");
       const monthlyEarnings = activeSubscriptions.reduce(
+        (sum, sub) => sum + (sub.hostPayoutPerMonth || 0),
+        0
+      );
+
+      // Total historical earnings from all subscriptions
+      const totalEarnings = allSubscriptions.reduce(
         (sum, sub) => sum + (sub.hostPayoutPerMonth || 0),
         0
       );
@@ -300,12 +312,13 @@ export const hostsRouter = router({
       return {
         hostedAgentCount: hostedAgents.length,
         monthlyEarnings,
-        totalEarnings: host.totalEarnings || 0,
+        totalEarnings: host.totalEarnings || totalEarnings || 0,
         uptimePercent: host.uptimePercent || 100,
         agents: hostedAgents.map((a) => ({
           id: a.id,
           name: a.name,
           status: a.status,
+          tier: a.tier,
           createdAt: a.createdAt,
         })),
       };

@@ -25,6 +25,7 @@ export const agentStatusEnum = pgEnum("agent_status", [
   "running",
   "stopped",
   "failed",
+  "deleted",
 ]);
 export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "active",

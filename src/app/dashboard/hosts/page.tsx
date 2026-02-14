@@ -352,16 +352,38 @@ export default function HostsPage() {
                     >
                       {host.name}
                     </Link>
+                    {host.isolationMode && host.isolationMode !== "unknown" && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
+                        {host.isolationMode === "docker" || host.isolationMode === "podman"
+                          ? "🐳 Docker"
+                          : "⚠️ Limited"}
+                      </span>
+                    )}
                   </div>
 
                   <p className="text-sm text-muted-foreground mt-2">
-                    {host.cpuCores} cores • {host.ramGb}GB RAM •{" "}
+                    {host.cpuCores ? `${host.cpuCores} cores` : "Specs pending"} •{" "}
+                    {host.ramGb ? `${host.ramGb}GB RAM` : ""} •{" "}
                     {host.city || host.region || "Unknown location"}
                   </p>
 
-                  <div className="flex items-center gap-4 mt-3 text-sm">
+                  <div className="flex items-center gap-4 mt-3 text-sm flex-wrap">
+                    {/* Agent count */}
+                    <span className="text-foreground font-medium">
+                      {host.agents && host.agents.length > 0
+                        ? `${host.agents.length} agent${host.agents.length !== 1 ? "s" : ""}`
+                        : "No agents"}
+                    </span>
+                    {/* Per-tier pricing */}
                     <span className="text-primary font-medium">
-                      ${((host.pricePerMonth || 0) / 100).toFixed(2)}/mo
+                      {[
+                        host.priceLite && `Lite: $${(host.priceLite / 100).toFixed(0)}`,
+                        host.priceStandard && `Std: $${(host.priceStandard / 100).toFixed(0)}`,
+                        host.pricePro && `Pro: $${(host.pricePro / 100).toFixed(0)}`,
+                        host.priceCompute && `Compute: $${(host.priceCompute / 100).toFixed(0)}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" | ") || `$${((host.pricePerMonth || 0) / 100).toFixed(2)}/mo`}
                     </span>
                     <span className="text-muted-foreground">
                       {host.uptimePercent?.toFixed(1)}% uptime

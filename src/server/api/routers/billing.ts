@@ -107,7 +107,7 @@ export const billingRouter = router({
     const subs = await ctx.db.query.subscriptions.findMany({
       where: eq(subscriptions.userId, ctx.user.id),
       with: {
-        agent: { columns: { id: true, name: true, status: true } },
+        agent: { columns: { id: true, name: true, status: true, tier: true } },
         host: { columns: { id: true, name: true, region: true } },
       },
       orderBy: (s, { desc }) => [desc(s.createdAt)],

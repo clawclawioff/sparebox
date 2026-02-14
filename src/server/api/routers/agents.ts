@@ -2,16 +2,19 @@ import { z } from "zod";
 import { router, protectedProcedure, adminProcedure } from "../trpc";
 import { TRPCError } from "@trpc/server";
 import { agents, hosts, subscriptions, agentCommands } from "@/db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, not } from "drizzle-orm";
 import { PLATFORM_FEE_PERCENT, TIERS, type TierKey } from "@/lib/constants";
 import { encrypt } from "@/lib/encryption";
 import Stripe from "stripe";
 
 export const agentsRouter = router({
-  // List agents for the current user
+  // List agents for the current user (excludes soft-deleted)
   list: protectedProcedure.query(async ({ ctx }) => {
     return ctx.db.query.agents.findMany({
-      where: eq(agents.userId, ctx.user.id),
+      where: and(
+        eq(agents.userId, ctx.user.id),
+        not(eq(agents.status, "deleted"))
+      ),
       with: {
         host: {
           columns: {
@@ -372,7 +375,7 @@ export const agentsRouter = router({
       });
     }),
 
-  // Delete an agent
+  // Delete an agent (soft delete — preserves subscription/earnings history)
   delete: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -387,7 +390,14 @@ export const agentsRouter = router({
         });
       }
 
-      // Send undeploy command to host (will be cleaned up when agent is cascade-deleted)
+      if (existing.status === "deleted") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Agent is already deleted",
+        });
+      }
+
+      // Send undeploy command to host
       if (existing.hostId) {
         await ctx.db.insert(agentCommands).values({
           agentId: existing.id,
@@ -398,7 +408,7 @@ export const agentsRouter = router({
         });
       }
 
-      // Cancel active Stripe subscriptions before deleting DB records
+      // Cancel active Stripe subscriptions
       const agentSubs = await ctx.db.query.subscriptions.findMany({
         where: and(
           eq(subscriptions.agentId, input.id),
@@ -419,13 +429,21 @@ export const agentsRouter = router({
         }
       }
 
-      // Delete subscriptions
+      // Soft delete: mark subscriptions as canceled, keep rows for history
       await ctx.db
-        .delete(subscriptions)
+        .update(subscriptions)
+        .set({ status: "canceled", updatedAt: new Date() })
         .where(eq(subscriptions.agentId, input.id));
 
-      // Delete agent
-      await ctx.db.delete(agents).where(eq(agents.id, input.id));
+      // Soft delete agent: mark as "deleted", keep row for billing/earnings history
+      await ctx.db
+        .update(agents)
+        .set({
+          status: "deleted",
+          containerId: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(agents.id, input.id));
 
       return { success: true };
     }),
