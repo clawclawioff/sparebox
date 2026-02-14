@@ -264,11 +264,20 @@ async function handleCheckoutCompleted(session: any) {
       columns: { email: true },
     });
     if (deployer?.email) {
+      // Use the actual tier price, not the default pricePerMonth
+      const tierPriceMap: Record<string, number | null> = {
+        lite: host.priceLite,
+        standard: host.priceStandard,
+        pro: host.pricePro,
+        compute: host.priceCompute,
+      };
+      const actualPrice = tierPriceMap[tier] ?? host.pricePerMonth;
+
       sendDeploySuccessEmail(deployer.email, {
         agentName: finalAgentName,
         hostName: host.name,
         hostRegion: host.region || host.city || host.country || "Unknown",
-        price: host.pricePerMonth,
+        price: actualPrice,
         agentId: createdAgentId,
       }).catch((err) => console.error("[email] Failed to send deploy success email:", err));
     }

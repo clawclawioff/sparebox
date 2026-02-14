@@ -206,7 +206,17 @@ export default function BrowseHostsPage() {
                           {host.name}
                         </h3>
                         <span className="text-primary font-semibold">
-                          ${((host.pricePerMonth || 0) / 100).toFixed(0)}/mo
+                          from ${(
+                            Math.min(
+                              ...[
+                                host.priceLite,
+                                host.priceStandard,
+                                host.pricePro,
+                                host.priceCompute,
+                              ].filter((p): p is number => typeof p === "number" && p > 0)
+                                .concat(host.pricePerMonth || 0)
+                            ) / 100
+                          ).toFixed(0)}/mo
                         </span>
                         <LastSeenBadge lastHeartbeat={(host as any).lastHeartbeat} />
                         <IsolationBadge mode={isolationMode} />

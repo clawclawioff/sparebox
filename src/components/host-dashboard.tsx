@@ -12,10 +12,31 @@ interface HostDashboardProps {
   userId: string;
 }
 
+function formatRelativeTime(date: Date | string | null): string {
+  if (!date) return "never";
+  const ms = Date.now() - new Date(date).getTime();
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 export function HostDashboard({ userId }: HostDashboardProps) {
   const { data: hosts, isLoading } = trpc.hosts.list.useQuery();
 
   const activeMachines = hosts?.filter((h) => h.status === "active").length || 0;
+
+  // Count total hosted agents across all machines
+  const totalHostedAgents = hosts?.reduce(
+    (sum, h) => sum + (h.agents?.length || 0),
+    0
+  ) || 0;
+
+  // Sum earnings from subscription-linked agents (hostPayoutPerMonth from getStats)
+  // For the overview, we show per-tier pricing info from the hosts list
   const totalEarnings = hosts?.reduce((sum, h) => sum + (h.totalEarnings || 0), 0) || 0;
 
   if (isLoading) {
@@ -39,8 +60,9 @@ export function HostDashboard({ userId }: HostDashboardProps) {
         />
         <StatCard
           label="Hosted Agents"
-          value="0"
+          value={totalHostedAgents}
           icon={Cpu}
+          sublabel={`across ${hosts?.length || 0} machine${(hosts?.length || 0) !== 1 ? "s" : ""}`}
         />
       </div>
 
@@ -79,11 +101,25 @@ export function HostDashboard({ userId }: HostDashboardProps) {
                       <h3 className="font-medium text-foreground">{host.name}</h3>
                     </div>
                     <p className="text-sm text-muted-foreground mt-2">
-                      {host.cpuCores} cores • {host.ramGb}GB RAM • {host.city || host.region || "Unknown location"}
+                      {host.cpuCores ? `${host.cpuCores} cores` : "Specs pending"} • {host.ramGb ? `${host.ramGb}GB RAM` : ""} • {host.city || host.region || "Unknown location"}
                     </p>
-                    <p className="text-sm text-muted-foreground/70 mt-1">
-                      ${((host.pricePerMonth || 0) / 100).toFixed(2)}/mo • Last heartbeat: {host.lastHeartbeat ? "just now" : "never"}
-                    </p>
+                    <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground/70 flex-wrap">
+                      <span>{host.agents?.length || 0} agent{(host.agents?.length || 0) !== 1 ? "s" : ""}</span>
+                      <span>•</span>
+                      {/* Show per-tier pricing if available */}
+                      <span className="text-primary font-medium">
+                        {[
+                          host.priceLite && `Lite: $${(host.priceLite / 100).toFixed(0)}`,
+                          host.priceStandard && `Std: $${(host.priceStandard / 100).toFixed(0)}`,
+                          host.pricePro && `Pro: $${(host.pricePro / 100).toFixed(0)}`,
+                          host.priceCompute && `Compute: $${(host.priceCompute / 100).toFixed(0)}`,
+                        ]
+                          .filter(Boolean)
+                          .join(" | ") || `$${((host.pricePerMonth || 0) / 100).toFixed(2)}/mo`}
+                      </span>
+                      <span>•</span>
+                      <span>Last heartbeat: {formatRelativeTime(host.lastHeartbeat)}</span>
+                    </div>
                   </div>
                   <Link
                     href={`/dashboard/hosts/${host.id}`}

@@ -265,6 +265,9 @@ export default function BillingPage() {
                     <p className="text-sm text-muted-foreground">
                       {sub.host?.name || "Unknown Host"} •{" "}
                       {sub.host?.region || "Unknown Region"}
+                      {(sub as any).tier && (
+                        <span className="ml-1 capitalize">• {(sub as any).tier} tier</span>
+                      )}
                     </p>
                     {sub.currentPeriodEnd && (
                       <p className="text-xs text-muted-foreground/70 mt-0.5">
@@ -329,6 +332,9 @@ export default function BillingPage() {
                       {sub.canceledAt
                         ? new Date(sub.canceledAt).toLocaleDateString()
                         : ""}
+                      {(sub as any).tier && (
+                        <span className="ml-1 capitalize">• {(sub as any).tier} tier</span>
+                      )}
                     </p>
                   </div>
                 </div>

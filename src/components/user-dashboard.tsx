@@ -15,11 +15,13 @@ interface UserDashboardProps {
 
 export function UserDashboard({ userId }: UserDashboardProps) {
   const { data: agents, isLoading } = trpc.agents.list.useQuery();
+  const { data: subscriptions } = trpc.billing.getMySubscriptions.useQuery();
 
   const activeAgents = agents?.filter((a) => a.status === "running").length || 0;
   
-  // TODO: Calculate from actual subscriptions
-  const totalCost = 0;
+  // Calculate from actual active subscriptions
+  const activeSubs = subscriptions?.filter((s) => s.status === "active" || s.status === "past_due") || [];
+  const totalCost = activeSubs.reduce((sum, s) => sum + s.pricePerMonth, 0);
 
   if (isLoading) {
     return <DashboardSkeleton />;
@@ -39,11 +41,13 @@ export function UserDashboard({ userId }: UserDashboardProps) {
           label="Monthly Cost"
           value={`$${(totalCost / 100).toFixed(2)}`}
           icon={DollarSign}
+          sublabel={`${activeSubs.length} subscription${activeSubs.length !== 1 ? "s" : ""}`}
         />
         <StatCard
-          label="Avg Uptime"
-          value="99.9%"
+          label="Total Agents"
+          value={agents?.length || 0}
           icon={Clock}
+          sublabel={`${activeAgents} running`}
         />
       </div>
 

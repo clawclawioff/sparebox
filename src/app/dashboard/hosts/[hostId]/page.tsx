@@ -535,16 +535,22 @@ export default function HostDetailsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <StatCard
           label="Hosted Agents"
           value={stats?.hostedAgentCount || 0}
           icon={Bot}
         />
         <StatCard
-          label="Earnings (This Month)"
+          label="Monthly Earnings"
           value={formatCurrency(stats?.monthlyEarnings || 0)}
-          sublabel={`${formatCurrency(host.pricePerMonth || 0)}/mo × 60%`}
+          sublabel="from active subscriptions"
+          icon={DollarSign}
+        />
+        <StatCard
+          label="Total Earnings"
+          value={formatCurrency(stats?.totalEarnings || 0)}
+          sublabel="all time (incl. deleted agents)"
           icon={DollarSign}
         />
         <StatCard
@@ -648,7 +654,7 @@ export default function HostDetailsPage() {
             <div className="flex items-start gap-3">
               <DollarSign className="w-4 h-4 text-muted-foreground mt-0.5" />
               <div>
-                <span className="text-muted-foreground">Price</span>
+                <span className="text-muted-foreground">Pricing (per tier)</span>
                 {isEditing ? (
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-muted-foreground">$</span>
@@ -663,13 +669,39 @@ export default function HostDetailsPage() {
                       min="5"
                       max="100"
                     />
-                    <span className="text-muted-foreground">/month</span>
+                    <span className="text-muted-foreground">/month (default)</span>
                   </div>
                 ) : (
-                  <p className="text-foreground">
-                    {formatCurrency(host.pricePerMonth || 0)}/month{" "}
-                    <span className="text-muted-foreground/70">(you receive {formatCurrency((host.pricePerMonth || 0) * 0.6)})</span>
-                  </p>
+                  <div className="space-y-1 mt-1">
+                    {[
+                      { label: "Lite", price: (host as any).priceLite },
+                      { label: "Standard", price: (host as any).priceStandard },
+                      { label: "Pro", price: (host as any).pricePro },
+                      { label: "Compute", price: (host as any).priceCompute },
+                    ]
+                      .filter((t) => t.price && t.price > 0)
+                      .map((t) => (
+                        <p key={t.label} className="text-foreground text-sm">
+                          <span className="font-medium">{t.label}:</span>{" "}
+                          {formatCurrency(t.price)}/mo{" "}
+                          <span className="text-muted-foreground/70">
+                            (you receive {formatCurrency(Math.round(t.price * 0.6))})
+                          </span>
+                        </p>
+                      ))}
+                    {/* Fallback if no tier pricing set */}
+                    {!(host as any).priceLite &&
+                      !(host as any).priceStandard &&
+                      !(host as any).pricePro &&
+                      !(host as any).priceCompute && (
+                        <p className="text-foreground">
+                          {formatCurrency(host.pricePerMonth || 0)}/month{" "}
+                          <span className="text-muted-foreground/70">
+                            (you receive {formatCurrency((host.pricePerMonth || 0) * 0.6)})
+                          </span>
+                        </p>
+                      )}
+                  </div>
                 )}
               </div>
             </div>
@@ -756,9 +788,11 @@ export default function HostDetailsPage() {
               <thead>
                 <tr className="text-left text-muted-foreground border-b border-border">
                   <th className="pb-3 font-medium">Agent</th>
+                  <th className="pb-3 font-medium">Tier</th>
                   <th className="pb-3 font-medium">Status</th>
                   <th className="pb-3 font-medium">Started</th>
-                  <th className="pb-3 font-medium text-right">Earnings</th>
+                  <th className="pb-3 font-medium text-right">Price</th>
+                  <th className="pb-3 font-medium text-right">Your Earnings</th>
                 </tr>
               </thead>
               <tbody>
@@ -771,13 +805,25 @@ export default function HostDetailsPage() {
                       </span>
                     </td>
                     <td className="py-3">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-foreground capitalize">
+                        {agent.tier || "standard"}
+                      </span>
+                    </td>
+                    <td className="py-3">
                       <AgentStatusBadge status={agent.status} />
                     </td>
                     <td className="py-3 text-muted-foreground">
                       {formatDate(agent.createdAt)}
                     </td>
+                    <td className="py-3 text-right text-muted-foreground">
+                      {agent.pricePerMonth > 0
+                        ? `${formatCurrency(agent.pricePerMonth)}/mo`
+                        : "—"}
+                    </td>
                     <td className="py-3 text-right text-primary font-medium">
-                      {formatCurrency((host.pricePerMonth || 0) * 0.6)}/mo
+                      {agent.monthlyEarnings > 0
+                        ? `${formatCurrency(agent.monthlyEarnings)}/mo`
+                        : "—"}
                     </td>
                   </tr>
                 ))}
@@ -800,6 +846,57 @@ export default function HostDetailsPage() {
           Note: Agent details are private to their owners. You can only see basic status information.
         </p>
       </div>
+
+      {/* Deleted Agents — Earnings History */}
+      {stats?.deletedAgents && stats.deletedAgents.length > 0 && (
+        <div className="bg-card border border-border rounded-xl p-6 mt-6">
+          <h3 className="font-semibold text-foreground mb-4">
+            Past Agents (Earnings History)
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b border-border">
+                  <th className="pb-3 font-medium">Agent</th>
+                  <th className="pb-3 font-medium">Tier</th>
+                  <th className="pb-3 font-medium">Hosted</th>
+                  <th className="pb-3 font-medium">Removed</th>
+                  <th className="pb-3 font-medium text-right">Total Earned</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.deletedAgents.map((agent) => (
+                  <tr
+                    key={agent.id}
+                    className="border-b border-border/50 last:border-0 opacity-70"
+                  >
+                    <td className="py-3">
+                      <span className="text-foreground">{agent.name}</span>
+                      <span className="text-muted-foreground/70 text-xs ml-2">
+                        {agent.id.slice(0, 8)}...
+                      </span>
+                    </td>
+                    <td className="py-3">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground capitalize">
+                        {agent.tier || "standard"}
+                      </span>
+                    </td>
+                    <td className="py-3 text-muted-foreground">
+                      {formatDate(agent.createdAt)}
+                    </td>
+                    <td className="py-3 text-muted-foreground">
+                      {agent.deletedAt ? formatDate(agent.deletedAt) : "—"}
+                    </td>
+                    <td className="py-3 text-right text-primary font-medium">
+                      {formatCurrency(agent.totalEarnings)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

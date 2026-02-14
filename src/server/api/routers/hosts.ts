@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomBytes, createHash } from "crypto";
 import { router, protectedProcedure, hostProcedure } from "../trpc";
 import { hosts, hostHeartbeats, hostApiKeys, agents, subscriptions, user } from "@/db";
-import { eq, desc, and, gte, sql, not, isNull } from "drizzle-orm";
+import { eq, desc, and, gte, sql, not, isNull, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { API_KEY_PREFIX, API_KEY_ENTROPY_BYTES, HEARTBEAT_STALE_THRESHOLD_MS } from "@/lib/constants";
 import { sendHostOfflineEmail } from "@/lib/email/notifications";
@@ -16,6 +16,7 @@ export const hostsRouter = router({
       with: {
         agents: {
           columns: { id: true, name: true, status: true, tier: true },
+          where: not(eq(agents.status, "deleted")),
         },
       },
     });
@@ -162,11 +163,11 @@ export const hostsRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Host not found" });
       }
 
-      // Check for active agents
+      // Check for active agents (exclude stopped and soft-deleted)
       const activeAgents = await ctx.db.query.agents.findMany({
         where: and(
           eq(agents.hostId, input.id),
-          not(eq(agents.status, "stopped"))
+          not(inArray(agents.status, ["stopped", "deleted", "failed"]))
         ),
       });
 
@@ -286,10 +287,15 @@ export const hostsRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Host not found" });
       }
 
-      // Get hosted agents
-      const hostedAgents = await ctx.db.query.agents.findMany({
+      // Get ALL hosted agents (including soft-deleted for earnings history)
+      const allAgents = await ctx.db.query.agents.findMany({
         where: eq(agents.hostId, input.id),
       });
+
+      // Active agents = not deleted
+      const activeAgents = allAgents.filter(a => a.status !== "deleted");
+      // Deleted agents (for earnings history)
+      const deletedAgents = allAgents.filter(a => a.status === "deleted");
 
       // Get ALL subscriptions for this host (not just active) for total earnings
       const allSubscriptions = await ctx.db.query.subscriptions.findMany({
@@ -303,24 +309,64 @@ export const hostsRouter = router({
         0
       );
 
-      // Total historical earnings from all subscriptions
+      // Total historical earnings: estimate from all subscriptions × months active
+      // For now, use hostPayoutPerMonth as proxy (will be replaced by real Stripe data)
       const totalEarnings = allSubscriptions.reduce(
-        (sum, sub) => sum + (sub.hostPayoutPerMonth || 0),
+        (sum, sub) => {
+          const start = sub.createdAt ? new Date(sub.createdAt).getTime() : Date.now();
+          const end = sub.canceledAt ? new Date(sub.canceledAt).getTime() : Date.now();
+          const months = Math.max(1, Math.ceil((end - start) / (30 * 24 * 60 * 60 * 1000)));
+          return sum + (sub.hostPayoutPerMonth || 0) * months;
+        },
         0
       );
 
+      // Build subscription lookup by agentId for per-agent earnings
+      const subsByAgent = new Map<string, typeof allSubscriptions>();
+      for (const sub of allSubscriptions) {
+        const existing = subsByAgent.get(sub.agentId) || [];
+        existing.push(sub);
+        subsByAgent.set(sub.agentId, existing);
+      }
+
       return {
-        hostedAgentCount: hostedAgents.length,
+        hostedAgentCount: activeAgents.length,
         monthlyEarnings,
         totalEarnings: host.totalEarnings || totalEarnings || 0,
         uptimePercent: host.uptimePercent || 100,
-        agents: hostedAgents.map((a) => ({
-          id: a.id,
-          name: a.name,
-          status: a.status,
-          tier: a.tier,
-          createdAt: a.createdAt,
-        })),
+        // Return active agents with per-agent earnings
+        agents: activeAgents.map((a) => {
+          const agentSubs = subsByAgent.get(a.id) || [];
+          const activeSub = agentSubs.find(s => s.status === "active");
+          return {
+            id: a.id,
+            name: a.name,
+            status: a.status,
+            tier: a.tier,
+            createdAt: a.createdAt,
+            monthlyEarnings: activeSub?.hostPayoutPerMonth || 0,
+            pricePerMonth: activeSub?.pricePerMonth || 0,
+          };
+        }),
+        // Also return deleted agents for historical earnings display
+        deletedAgents: deletedAgents.map((a) => {
+          const agentSubs = subsByAgent.get(a.id) || [];
+          const totalAgentEarnings = agentSubs.reduce((sum, sub) => {
+            const start = sub.createdAt ? new Date(sub.createdAt).getTime() : Date.now();
+            const end = sub.canceledAt ? new Date(sub.canceledAt).getTime() : Date.now();
+            const months = Math.max(1, Math.ceil((end - start) / (30 * 24 * 60 * 60 * 1000)));
+            return sum + (sub.hostPayoutPerMonth || 0) * months;
+          }, 0);
+          return {
+            id: a.id,
+            name: a.name,
+            tier: a.tier,
+            createdAt: a.createdAt,
+            deletedAt: a.updatedAt, // updatedAt set when soft-deleted
+            totalEarnings: totalAgentEarnings,
+            lastPricePerMonth: agentSubs[agentSubs.length - 1]?.pricePerMonth || 0,
+          };
+        }),
       };
     }),
 

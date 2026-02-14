@@ -140,7 +140,14 @@ export default function AgentsPage() {
                   </div>
                   <p className="text-sm text-muted-foreground mt-2">
                     {(agent as any).host ? (
-                      <>Hosted by {(agent as any).host.name}</>
+                      <>
+                        Hosted by {(agent as any).host.name}
+                        {(agent as any).tier && (
+                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted capitalize">
+                            {(agent as any).tier} tier
+                          </span>
+                        )}
+                      </>
                     ) : (
                       "No host assigned"
                     )}

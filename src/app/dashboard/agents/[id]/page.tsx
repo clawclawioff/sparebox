@@ -27,6 +27,7 @@ function StatusBadge({ status }: { status: string }) {
     pending: "status-warning",
     deploying: "bg-blue-500/10 text-blue-600",
     failed: "status-error",
+    deleted: "bg-muted text-muted-foreground/50",
   };
 
   return (
@@ -39,7 +40,7 @@ function StatusBadge({ status }: { status: string }) {
         className={`w-2 h-2 rounded-full ${
           status === "running"
             ? "bg-green-600"
-            : status === "stopped"
+            : status === "stopped" || status === "deleted"
             ? "bg-muted-foreground"
             : status === "pending" || status === "deploying"
             ? "bg-yellow-500"
