@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { db } from "@/db";
-import { agents, hostApiKeys, hosts } from "@/db/schema";
+import { agents, hostApiKeys } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { decrypt } from "@/lib/encryption";
 import { API_KEY_PREFIX, TIERS, type TierKey } from "@/lib/constants";
@@ -76,6 +76,32 @@ export async function GET(
   // Parse agent config (OpenClaw config overrides)
   const agentConfig = (agent.config as Record<string, unknown>) || {};
 
+  // 4. Build environment variables for the agent
+  //    This is the KEY fix: we must pass the API key and model as env vars
+  //    so the running agent (docker or profile) can use them.
+  const env: Record<string, string> = {};
+
+  if (apiKeyPlaintext) {
+    // Detect provider from key prefix
+    if (apiKeyPlaintext.startsWith("sk-ant-")) {
+      env.ANTHROPIC_API_KEY = apiKeyPlaintext;
+    } else if (apiKeyPlaintext.startsWith("sk-")) {
+      env.OPENAI_API_KEY = apiKeyPlaintext;
+    } else {
+      // Unknown provider — set both common vars as fallback
+      env.ANTHROPIC_API_KEY = apiKeyPlaintext;
+      env.OPENAI_API_KEY = apiKeyPlaintext;
+    }
+  }
+
+  // Set model from config if provided
+  if (agentConfig.model && typeof agentConfig.model === "string") {
+    env.OPENCLAW_MODEL = agentConfig.model;
+  }
+
+  // Set agent name
+  env.OPENCLAW_AGENT_NAME = agent.name;
+
   const configBundle = {
     agentId: agent.id,
     agentName: agent.name,
@@ -85,13 +111,15 @@ export async function GET(
       cpuCores: tier.cpuCores,
       diskGb: tier.diskGb,
     },
-    // OpenClaw configuration (merged with defaults)
+    // Environment variables — daemon MUST pass these to the container/profile
+    env,
+    // OpenClaw configuration overrides (daemon writes to config file)
     openclawConfig: {
       ...agentConfig,
     },
-    // Workspace files to create
+    // Workspace files to create in the agent's workspace
     workspaceFiles,
-    // LLM API key (if provided by deployer)
+    // LLM API key (kept for backwards compat, but `env` is authoritative)
     apiKey: apiKeyPlaintext,
     // Metadata
     createdAt: agent.createdAt,

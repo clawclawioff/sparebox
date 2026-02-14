@@ -24,12 +24,12 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// src/index.ts
+// daemon/src/index.ts
 var fs3 = __toESM(require("node:fs"), 1);
 var path3 = __toESM(require("node:path"), 1);
 var import_node_url3 = require("node:url");
 
-// src/config.ts
+// daemon/src/config.ts
 var fs = __toESM(require("node:fs"), 1);
 var path = __toESM(require("node:path"), 1);
 var os = __toESM(require("node:os"), 1);
@@ -77,7 +77,7 @@ function validateConfig(config) {
   return errors;
 }
 
-// src/metrics.ts
+// daemon/src/metrics.ts
 var os2 = __toESM(require("node:os"), 1);
 var import_node_child_process = require("node:child_process");
 function snapshotCpu() {
@@ -197,12 +197,12 @@ function getOsInfo() {
   return `${os2.type()} ${os2.release()}`;
 }
 
-// src/heartbeat.ts
+// daemon/src/heartbeat.ts
 var https2 = __toESM(require("node:https"), 1);
-var http2 = __toESM(require("node:http"), 1);
+var http3 = __toESM(require("node:http"), 1);
 var import_node_url2 = require("node:url");
 
-// src/log.ts
+// daemon/src/log.ts
 function pad(n) {
   return n.toString().padStart(2, "0");
 }
@@ -221,7 +221,7 @@ function log(level, message) {
   }
 }
 
-// src/agent-manager.ts
+// daemon/src/agent-manager.ts
 var fs2 = __toESM(require("node:fs"), 1);
 var path2 = __toESM(require("node:path"), 1);
 var os3 = __toESM(require("node:os"), 1);
@@ -229,7 +229,7 @@ var https = __toESM(require("node:https"), 1);
 var http = __toESM(require("node:http"), 1);
 var import_node_url = require("node:url");
 
-// src/docker.ts
+// daemon/src/docker.ts
 var import_node_child_process2 = require("node:child_process");
 function run(cmd, args2, timeoutMs = 6e4) {
   return new Promise((resolve, reject) => {
@@ -387,7 +387,7 @@ async function isContainerRunning(id) {
   }
 }
 
-// src/profile-fallback.ts
+// daemon/src/profile-fallback.ts
 var import_node_child_process3 = require("node:child_process");
 function run2(cmd, args2, timeoutMs = 3e4) {
   return new Promise((resolve, reject) => {
@@ -507,7 +507,7 @@ async function killProfile(pid) {
   }
 }
 
-// src/agent-manager.ts
+// daemon/src/agent-manager.ts
 var SPAREBOX_DIR = path2.join(os3.homedir(), ".sparebox");
 var AGENTS_FILE = path2.join(SPAREBOX_DIR, "agents.json");
 var AGENTS_DIR = path2.join(SPAREBOX_DIR, "agents");
@@ -618,11 +618,29 @@ async function handleDeploy(cmd) {
       if (configData.env) {
         agentEnv = { ...agentEnv, ...configData.env };
       }
+      if (configData.workspaceFiles && typeof configData.workspaceFiles === "object") {
+        for (const [filename, content] of Object.entries(configData.workspaceFiles)) {
+          if (typeof content === "string") {
+            const filePath = path2.join(workspaceDir, filename);
+            ensureDir(path2.dirname(filePath));
+            fs2.writeFileSync(filePath, content, "utf-8");
+            log("INFO", `Wrote workspace file: ${filename} (${content.length} bytes)`);
+          }
+        }
+      }
+      if (configData.openclawConfig && typeof configData.openclawConfig === "object") {
+        fs2.writeFileSync(
+          path2.join(stateDir, "openclaw-config.json"),
+          JSON.stringify(configData.openclawConfig, null, 2),
+          "utf-8"
+        );
+      }
       fs2.writeFileSync(
         path2.join(stateDir, "deploy-config.json"),
         JSON.stringify(configData, null, 2),
         "utf-8"
       );
+      log("INFO", `Deploy config applied for ${agentId}: ${Object.keys(agentEnv).join(", ") || "no env vars"}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log("WARN", `Failed to fetch deploy config for ${agentId}: ${msg}`);
@@ -776,10 +794,32 @@ async function handleUpdateConfig(cmd) {
     return { id: cmd.id, status: "error", error: `Agent ${cmd.agentId} not found` };
   }
   try {
+    let newEnv = {};
     if (cmd.payload.configUrl && daemonConfig) {
       const configData = await fetchConfig(cmd.payload.configUrl, daemonConfig);
       const stateDir = path2.join(AGENTS_DIR, cmd.agentId, "state");
+      const workspaceDir = path2.join(AGENTS_DIR, cmd.agentId, "workspace");
       ensureDir(stateDir);
+      ensureDir(workspaceDir);
+      if (configData.env) {
+        newEnv = { ...configData.env };
+      }
+      if (configData.workspaceFiles && typeof configData.workspaceFiles === "object") {
+        for (const [filename, content] of Object.entries(configData.workspaceFiles)) {
+          if (typeof content === "string") {
+            const filePath = path2.join(workspaceDir, filename);
+            ensureDir(path2.dirname(filePath));
+            fs2.writeFileSync(filePath, content, "utf-8");
+          }
+        }
+      }
+      if (configData.openclawConfig && typeof configData.openclawConfig === "object") {
+        fs2.writeFileSync(
+          path2.join(stateDir, "openclaw-config.json"),
+          JSON.stringify(configData.openclawConfig, null, 2),
+          "utf-8"
+        );
+      }
       fs2.writeFileSync(
         path2.join(stateDir, "deploy-config.json"),
         JSON.stringify(configData, null, 2),
@@ -792,7 +832,7 @@ async function handleUpdateConfig(cmd) {
     } else if (agent.isolation === "profile") {
       await stopProfile(agent.profile);
       await sleep2(1e3);
-      const pid = await startProfile(agent.profile, agent.port, {});
+      const pid = await startProfile(agent.profile, agent.port, newEnv);
       agent.pid = pid;
     }
     agent.status = "running";
@@ -978,8 +1018,9 @@ function sleep2(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// src/message-handler.ts
+// daemon/src/message-handler.ts
 var import_node_child_process4 = require("node:child_process");
+var http2 = __toESM(require("node:http"), 1);
 var pendingResponses = [];
 function drainMessageResponses() {
   const responses = [...pendingResponses];
@@ -989,13 +1030,13 @@ function drainMessageResponses() {
 function queueMessageResponses(responses) {
   pendingResponses.push(...responses);
 }
-function run3(cmd, args2, timeoutMs = 12e4) {
+function run3(cmd, args2, timeoutMs = 12e4, env) {
   return new Promise((resolve, reject) => {
     (0, import_node_child_process4.execFile)(cmd, args2, {
       timeout: timeoutMs,
       maxBuffer: 5 * 1024 * 1024,
       // 5MB for long responses
-      env: { ...process.env }
+      env: env ? { ...process.env, ...env } : { ...process.env }
     }, (err, stdout, stderr) => {
       if (err) {
         reject(new Error(`${cmd} failed: ${err.message}
@@ -1004,6 +1045,46 @@ stderr: ${stderr}`));
         resolve({ stdout: stdout ?? "", stderr: stderr ?? "" });
       }
     });
+  });
+}
+function httpPost(url, body, timeoutMs = 12e4) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const req = http2.request(
+      {
+        hostname: parsed.hostname,
+        port: parsed.port,
+        path: parsed.pathname,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body)
+        },
+        timeout: timeoutMs
+      },
+      (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          const responseBody = Buffer.concat(chunks).toString("utf-8");
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(responseBody);
+          } else {
+            reject(
+              new Error(
+                `HTTP ${res.statusCode}: ${responseBody.slice(0, 500)}`
+              )
+            );
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.on("timeout", () => {
+      req.destroy(new Error("HTTP request timeout"));
+    });
+    req.write(body);
+    req.end();
   });
 }
 async function processMessages(messages, agentRecords) {
@@ -1033,7 +1114,7 @@ async function handleMessage(msg, agentRecords) {
   if (agent.isolation === "docker" && agent.containerId) {
     await handleDockerMessage(msg, agent.containerId);
   } else if (agent.isolation === "profile") {
-    await handleProfileMessage(msg, msg.agentId);
+    await handleProfileMessage(msg, msg.agentId, agent.port);
   } else {
     log("WARN", `Agent ${msg.agentId} has unsupported isolation: ${agent.isolation}`);
     pendingResponses.push({
@@ -1051,18 +1132,16 @@ async function handleDockerMessage(msg, containerId) {
   log("INFO", `Sending message to Docker agent ${msg.agentId} (${containerId.slice(0, 12)})`);
   const sessionId = `sparebox-chat-${msg.agentId.slice(0, 12)}`;
   try {
-    const { stdout, stderr } = await run3(runtime, [
+    const body = JSON.stringify({
+      sessionKey: "main",
+      message: msg.content
+    });
+    const { stdout } = await run3(runtime, [
       "exec",
       containerId,
-      "openclaw",
-      "agent",
-      "--session-id",
-      sessionId,
-      "--message",
-      msg.content,
-      "--json",
-      "--timeout",
-      "90"
+      "node",
+      "-e",
+      `const http=require("http");const d=${JSON.stringify(body)};const r=http.request({hostname:"127.0.0.1",port:3000,path:"/api/sessions/send",method:"POST",headers:{"Content-Type":"application/json","Content-Length":Buffer.byteLength(d)},timeout:90000},(s)=>{let b="";s.on("data",(c)=>b+=c);s.on("end",()=>console.log(b))});r.on("error",(e)=>{console.error(e.message);process.exit(1)});r.write(d);r.end()`
     ], 12e4);
     const response = parseAgentResponse(stdout);
     log("INFO", `Agent ${msg.agentId} responded (${response.length} chars)`);
@@ -1072,31 +1151,22 @@ async function handleDockerMessage(msg, containerId) {
       content: response
     });
   } catch (err) {
-    throw new Error(`Docker exec failed: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`Docker message delivery failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
-async function handleProfileMessage(msg, agentId) {
-  const bin = await findOpenclawBinary();
-  if (!bin) {
-    throw new Error("openclaw binary not found");
-  }
-  const profileName = `sparebox-agent-${agentId.slice(0, 8)}`;
-  const sessionId = `sparebox-chat-${agentId.slice(0, 12)}`;
-  log("INFO", `Sending message to profile agent ${agentId} (${profileName})`);
+async function handleProfileMessage(msg, agentId, port) {
+  log("INFO", `Sending message to profile agent ${agentId} on port ${port}`);
+  const body = JSON.stringify({
+    sessionKey: "main",
+    message: msg.content
+  });
   try {
-    const { stdout, stderr } = await run3(bin, [
-      "--profile",
-      profileName,
-      "agent",
-      "--session-id",
-      sessionId,
-      "--message",
-      msg.content,
-      "--json",
-      "--timeout",
-      "90"
-    ], 12e4);
-    const response = parseAgentResponse(stdout);
+    const responseBody = await httpPost(
+      `http://127.0.0.1:${port}/api/sessions/send`,
+      body,
+      12e4
+    );
+    const response = parseAgentResponse(responseBody);
     log("INFO", `Agent ${agentId} responded (${response.length} chars)`);
     pendingResponses.push({
       messageId: msg.id,
@@ -1104,7 +1174,7 @@ async function handleProfileMessage(msg, agentId) {
       content: response
     });
   } catch (err) {
-    throw new Error(`Profile agent exec failed: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`Profile agent HTTP failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 function parseAgentResponse(stdout) {
@@ -1116,6 +1186,7 @@ function parseAgentResponse(stdout) {
     if (data.content) return data.content;
     if (data.message) return data.message;
     if (data.output) return data.output;
+    if (data.response) return data.response;
     if (typeof data === "string") return data;
     return JSON.stringify(data, null, 2);
   } catch {
@@ -1124,7 +1195,7 @@ function parseAgentResponse(stdout) {
   }
 }
 
-// src/heartbeat.ts
+// daemon/src/heartbeat.ts
 var MIN_BACKOFF_MS = 1e3;
 var MAX_BACKOFF_MS = 3e5;
 var backoffMs = MIN_BACKOFF_MS;
@@ -1150,10 +1221,10 @@ function detectOpenclawVersion() {
   }
 }
 detectOpenclawVersion();
-function request(url, options, body) {
+function request2(url, options, body) {
   return new Promise((resolve, reject) => {
     const parsed = new import_node_url2.URL(url);
-    const transport = parsed.protocol === "https:" ? https2 : http2;
+    const transport = parsed.protocol === "https:" ? https2 : http3;
     const req = transport.request(
       url,
       {
@@ -1218,7 +1289,7 @@ async function sendHeartbeat(config, daemonVersion) {
   const url = `${config.apiUrl}/api/hosts/heartbeat`;
   const body = JSON.stringify(payload);
   try {
-    const res = await request(url, {
+    const res = await request2(url, {
       headers: {
         Authorization: `Bearer ${config.apiKey}`
       }
@@ -1326,7 +1397,7 @@ function sleep3(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// src/index.ts
+// daemon/src/index.ts
 var import_meta = {};
 function getDaemonVersion() {
   try {

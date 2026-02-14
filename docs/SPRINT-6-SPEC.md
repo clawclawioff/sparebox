@@ -173,6 +173,60 @@ See Notion Task Board. Key items by priority:
 - 🟡 Medium: 2FA, CSRF, payment grace period, audit logging, signup race condition, webhook 200-on-error, email notifications
 - 🟢 Low: Error boundaries, loading.tsx, Resend upgrade, Discord, Product Hunt, demo video, blog posts
 
+### Phase 5: Agent Communication Bugs (Critical — Found via Browser Testing)
+
+#### 5.1 Deploy Config Doesn't Pass API Key to Agent
+**Priority: CRITICAL**
+**Root cause:** `/api/agents/[id]/deploy-config` returns `{ apiKey: "sk-ant-...", openclawConfig: {...} }` but the daemon's `fetchConfig()` only reads a `.env` field. The deployer's LLM API key, model config, and workspace files are **completely ignored** by the daemon.
+
+**Fix:** Update `deploy-config` endpoint to return an `env` object that includes `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY`) extracted from the deployer's encrypted key. Update daemon `fetchConfig` to properly extract and use `apiKey`, `openclawConfig`, and `workspaceFiles`.
+
+#### 5.2 Deploy Config Doesn't Set Model
+**Priority: CRITICAL**
+**Root cause:** Agent config template has `apiKey: $ANTHROPIC_API_KEY` but the daemon never writes the actual API key to the agent's environment. Even if the key was passed, OpenClaw needs a `model` field in its config. The `openclawConfig` from deploy-config is returned but never applied.
+
+**Fix:** Write a proper OpenClaw config (YAML or env vars) to the agent's workspace/state directory. The daemon must translate `openclawConfig` + `apiKey` into working env vars or config files.
+
+#### 5.3 Profile Agent Message Bridge Mismatch
+**Priority: HIGH**
+**Root cause:** `startProfile()` runs `openclaw --profile <name> gateway start` (a gateway daemon), but `handleProfileMessage()` then calls `openclaw --profile <name> agent --session-id ... --message ...` which is a separate process that can't communicate with the running gateway.
+
+**Fix:** For profile mode, messages should be sent via the running gateway's API endpoint (HTTP), not by spawning a separate CLI process. The gateway exposes a sessions API.
+
+#### 5.4 `openclaw agent --message` May Not Exist
+**Priority: HIGH**
+**Root cause:** The daemon assumes `openclaw agent --session-id <id> --message <text> --json` is a valid CLI subcommand. Need to verify this exists and determine the correct command format.
+
+**Fix:** Verify the OpenClaw CLI interface. If `agent --message` doesn't exist, use the gateway HTTP API (`/api/sessions/send`) or the `sessions_send` mechanism.
+
+## Implementation Notes (Phase 5)
+
+### Deploy Config Flow (Fixed)
+```
+deploy-config endpoint → returns:
+{
+  env: {
+    ANTHROPIC_API_KEY: "sk-ant-...",
+    OPENCLAW_MODEL: "anthropic/claude-sonnet-4-20250514",
+  },
+  openclawConfig: { ... },
+  workspaceFiles: { "SOUL.md": "...", ... },
+  resources: { ramMb, cpuCores, diskGb },
+}
+
+daemon fetchConfig → extracts env → passes to createContainer/startProfile
+daemon fetchConfig → writes workspaceFiles to agent workspace dir
+daemon fetchConfig → writes openclawConfig to agent state dir
+```
+
+### Message Bridge (Fixed for Profile Mode)
+```
+Profile agents run as gateway instances on a port.
+Messages should be sent via HTTP:
+POST http://localhost:<port>/api/sessions/send
+Body: { sessionKey: "main", message: "user text" }
+```
+
 ## Success Criteria
 Sprint 6 is done when:
 1. ✅ Stripe in production mode with working live payments
@@ -180,3 +234,5 @@ Sprint 6 is done when:
 3. ✅ Admin dashboard shows system overview
 4. ✅ Agent chat tested end-to-end (deployer → agent → response)
 5. ✅ Daemon updated on test host
+6. ✅ Deploy config properly passes API key + model to agent
+7. ✅ Messages successfully reach running agents and get responses
