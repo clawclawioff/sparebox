@@ -292,7 +292,7 @@ export async function POST(req: NextRequest) {
         });
 
         if (cmd && ack.status === "acked") {
-          if (cmd.type === "deploy" || cmd.type === "start") {
+          if (cmd.type === "deploy" || cmd.type === "start" || cmd.type === "restart") {
             await db
               .update(agents)
               .set({
