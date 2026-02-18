@@ -24,12 +24,12 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// daemon/src/index.ts
+// daemon/dist/index.js
 var fs3 = __toESM(require("node:fs"), 1);
 var path3 = __toESM(require("node:path"), 1);
 var import_node_url3 = require("node:url");
 
-// daemon/src/config.ts
+// daemon/dist/config.js
 var fs = __toESM(require("node:fs"), 1);
 var path = __toESM(require("node:path"), 1);
 var os = __toESM(require("node:os"), 1);
@@ -77,7 +77,7 @@ function validateConfig(config) {
   return errors;
 }
 
-// daemon/src/metrics.ts
+// daemon/dist/metrics.js
 var os2 = __toESM(require("node:os"), 1);
 var import_node_child_process = require("node:child_process");
 function snapshotCpu() {
@@ -100,14 +100,16 @@ async function getCpuUsage() {
   const b = snapshotCpu();
   const idleDelta = b.idle - a.idle;
   const totalDelta = b.total - a.total;
-  if (totalDelta === 0) return 0;
+  if (totalDelta === 0)
+    return 0;
   const usage = (totalDelta - idleDelta) / totalDelta * 100;
   return Math.round(Math.max(0, Math.min(100, usage)));
 }
 function getRamUsage() {
   const total = os2.totalmem();
   const free = os2.freemem();
-  if (total === 0) return 0;
+  if (total === 0)
+    return 0;
   return Math.round((total - free) / total * 100);
 }
 function execPromise(cmd) {
@@ -134,23 +136,25 @@ async function getDiskUsage() {
 async function getDiskUsageUnix() {
   const output = await execPromise("df -P /");
   const lines = output.trim().split("\n");
-  if (lines.length < 2) return -1;
+  if (lines.length < 2)
+    return -1;
   const parts = lines[1].trim().split(/\s+/);
   const capacityStr = parts[4];
-  if (!capacityStr) return -1;
+  if (!capacityStr)
+    return -1;
   const pct = parseInt(capacityStr.replace("%", ""), 10);
   return isNaN(pct) ? -1 : pct;
 }
 async function getDiskUsageWindows() {
-  const output = await execPromise(
-    `wmic logicaldisk where "DeviceID='C:'" get Size,FreeSpace /format:csv`
-  );
+  const output = await execPromise(`wmic logicaldisk where "DeviceID='C:'" get Size,FreeSpace /format:csv`);
   const lines = output.trim().split("\n").filter((l) => l.trim().length > 0);
-  if (lines.length < 2) return -1;
+  if (lines.length < 2)
+    return -1;
   const parts = lines[lines.length - 1].trim().split(",");
   const freeSpace = parseInt(parts[1] ?? "", 10);
   const totalSize = parseInt(parts[2] ?? "", 10);
-  if (isNaN(freeSpace) || isNaN(totalSize) || totalSize === 0) return -1;
+  if (isNaN(freeSpace) || isNaN(totalSize) || totalSize === 0)
+    return -1;
   return Math.round((totalSize - freeSpace) / totalSize * 100);
 }
 async function getTotalDiskGb() {
@@ -166,21 +170,23 @@ async function getTotalDiskGb() {
 async function getTotalDiskGbUnix() {
   const output = await execPromise("df -k /");
   const lines = output.trim().split("\n");
-  if (lines.length < 2) return -1;
+  if (lines.length < 2)
+    return -1;
   const parts = lines[1].trim().split(/\s+/);
   const totalKb = parseInt(parts[1] ?? "", 10);
-  if (isNaN(totalKb) || totalKb === 0) return -1;
+  if (isNaN(totalKb) || totalKb === 0)
+    return -1;
   return Math.round(totalKb / (1024 * 1024));
 }
 async function getTotalDiskGbWindows() {
-  const output = await execPromise(
-    `wmic logicaldisk where "DeviceID='C:'" get Size /format:csv`
-  );
+  const output = await execPromise(`wmic logicaldisk where "DeviceID='C:'" get Size /format:csv`);
   const lines = output.trim().split("\n").filter((l) => l.trim().length > 0);
-  if (lines.length < 2) return -1;
+  if (lines.length < 2)
+    return -1;
   const parts = lines[lines.length - 1].trim().split(",");
   const totalBytes = parseInt(parts[parts.length - 1] ?? "", 10);
-  if (isNaN(totalBytes) || totalBytes === 0) return -1;
+  if (isNaN(totalBytes) || totalBytes === 0)
+    return -1;
   return Math.round(totalBytes / 1024 ** 3);
 }
 function getTotalRamGb() {
@@ -197,12 +203,12 @@ function getOsInfo() {
   return `${os2.type()} ${os2.release()}`;
 }
 
-// daemon/src/heartbeat.ts
+// daemon/dist/heartbeat.js
 var https2 = __toESM(require("node:https"), 1);
-var http3 = __toESM(require("node:http"), 1);
+var http2 = __toESM(require("node:http"), 1);
 var import_node_url2 = require("node:url");
 
-// daemon/src/log.ts
+// daemon/dist/log.js
 function pad(n) {
   return n.toString().padStart(2, "0");
 }
@@ -221,7 +227,7 @@ function log(level, message) {
   }
 }
 
-// daemon/src/agent-manager.ts
+// daemon/dist/agent-manager.js
 var fs2 = __toESM(require("node:fs"), 1);
 var path2 = __toESM(require("node:path"), 1);
 var os3 = __toESM(require("node:os"), 1);
@@ -229,17 +235,13 @@ var https = __toESM(require("node:https"), 1);
 var http = __toESM(require("node:http"), 1);
 var import_node_url = require("node:url");
 
-// daemon/src/docker.ts
+// daemon/dist/docker.js
 var import_node_child_process2 = require("node:child_process");
 function run(cmd, args2, timeoutMs = 6e4) {
   return new Promise((resolve, reject) => {
     (0, import_node_child_process2.execFile)(cmd, args2, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) {
-        reject(
-          new Error(
-            `${cmd} ${args2.join(" ")} failed: ${err.message}${stderr ? " \u2014 " + stderr.trim() : ""}`
-          )
-        );
+        reject(new Error(`${cmd} ${args2.join(" ")} failed: ${err.message}${stderr ? " \u2014 " + stderr.trim() : ""}`));
       } else {
         resolve({ stdout: stdout ?? "", stderr: stderr ?? "" });
       }
@@ -248,7 +250,8 @@ function run(cmd, args2, timeoutMs = 6e4) {
 }
 var cachedRuntime = null;
 async function detectRuntime() {
-  if (cachedRuntime !== null) return cachedRuntime;
+  if (cachedRuntime !== null)
+    return cachedRuntime;
   for (const rt2 of ["docker", "podman"]) {
     try {
       await run(rt2, ["info", "--format", "{{.ServerVersion}}"], 1e4);
@@ -263,7 +266,8 @@ async function detectRuntime() {
 }
 async function rt() {
   const name = await detectRuntime();
-  if (!name) throw new Error("No container runtime available");
+  if (!name)
+    throw new Error("No container runtime available");
   return name;
 }
 async function pullImage(image) {
@@ -344,11 +348,7 @@ async function removeContainer(id) {
 async function getContainerStats(id) {
   const runtime = await rt();
   try {
-    const { stdout } = await run(
-      runtime,
-      ["stats", "--no-stream", "--format", "{{.CPUPerc}}|{{.MemUsage}}", id],
-      15e3
-    );
+    const { stdout } = await run(runtime, ["stats", "--no-stream", "--format", "{{.CPUPerc}}|{{.MemUsage}}", id], 15e3);
     const line = stdout.trim();
     const [cpuStr, memStr] = line.split("|");
     const cpuPercent = parseFloat((cpuStr ?? "0").replace("%", "")) || 0;
@@ -366,28 +366,28 @@ async function getContainerStats(id) {
 }
 function parseMemValue(s) {
   const num = parseFloat(s);
-  if (isNaN(num)) return 0;
+  if (isNaN(num))
+    return 0;
   const upper = s.toUpperCase();
-  if (upper.includes("GIB") || upper.includes("GB")) return Math.round(num * 1024);
-  if (upper.includes("MIB") || upper.includes("MB")) return Math.round(num);
-  if (upper.includes("KIB") || upper.includes("KB")) return Math.round(num / 1024);
+  if (upper.includes("GIB") || upper.includes("GB"))
+    return Math.round(num * 1024);
+  if (upper.includes("MIB") || upper.includes("MB"))
+    return Math.round(num);
+  if (upper.includes("KIB") || upper.includes("KB"))
+    return Math.round(num / 1024);
   return Math.round(num);
 }
 async function isContainerRunning(id) {
   const runtime = await rt();
   try {
-    const { stdout } = await run(
-      runtime,
-      ["inspect", "--format", "{{.State.Running}}", id],
-      1e4
-    );
+    const { stdout } = await run(runtime, ["inspect", "--format", "{{.State.Running}}", id], 1e4);
     return stdout.trim() === "true";
   } catch {
     return false;
   }
 }
 
-// daemon/src/profile-fallback.ts
+// daemon/dist/profile-fallback.js
 var import_node_child_process3 = require("node:child_process");
 function run2(cmd, args2, timeoutMs = 3e4) {
   return new Promise((resolve, reject) => {
@@ -402,7 +402,8 @@ function run2(cmd, args2, timeoutMs = 3e4) {
 }
 var openclawBin = null;
 async function findOpenclawBinary() {
-  if (openclawBin) return openclawBin;
+  if (openclawBin)
+    return openclawBin;
   for (const bin of ["openclaw", "npx openclaw"]) {
     try {
       await run2(bin.split(" ")[0], bin.split(" ").length > 1 ? [bin.split(" ")[1], "--version"] : ["--version"], 1e4);
@@ -471,7 +472,8 @@ async function stopProfile(profileName) {
   }
 }
 async function isProfileRunning(pid) {
-  if (!pid) return false;
+  if (!pid)
+    return false;
   try {
     process.kill(pid, 0);
     return true;
@@ -481,11 +483,14 @@ async function isProfileRunning(pid) {
 }
 async function getProfileStatus(profileName, pid) {
   const bin = await findOpenclawBinary();
-  if (!bin) return "unknown";
+  if (!bin)
+    return "unknown";
   try {
     const { stdout } = await run2(bin, ["--profile", profileName, "gateway", "status"], 1e4);
-    if (stdout.toLowerCase().includes("running")) return "running";
-    if (stdout.toLowerCase().includes("stopped")) return "stopped";
+    if (stdout.toLowerCase().includes("running"))
+      return "running";
+    if (stdout.toLowerCase().includes("stopped"))
+      return "stopped";
   } catch {
   }
   if (pid) {
@@ -494,7 +499,8 @@ async function getProfileStatus(profileName, pid) {
   return "unknown";
 }
 async function killProfile(pid) {
-  if (!pid) return;
+  if (!pid)
+    return;
   try {
     process.kill(pid, "SIGTERM");
     await new Promise((resolve) => setTimeout(resolve, 3e3));
@@ -507,7 +513,7 @@ async function killProfile(pid) {
   }
 }
 
-// daemon/src/agent-manager.ts
+// daemon/dist/agent-manager.js
 var SPAREBOX_DIR = path2.join(os3.homedir(), ".sparebox");
 var AGENTS_FILE = path2.join(SPAREBOX_DIR, "agents.json");
 var AGENTS_DIR = path2.join(SPAREBOX_DIR, "agents");
@@ -553,7 +559,8 @@ function getAgentRecordsForMessaging() {
         containerId: agent.containerId,
         pid: agent.pid,
         isolation: agent.isolation,
-        port: agent.port
+        port: agent.port,
+        profile: agent.profile
       });
     }
   }
@@ -629,17 +636,9 @@ async function handleDeploy(cmd) {
         }
       }
       if (configData.openclawConfig && typeof configData.openclawConfig === "object") {
-        fs2.writeFileSync(
-          path2.join(stateDir, "openclaw-config.json"),
-          JSON.stringify(configData.openclawConfig, null, 2),
-          "utf-8"
-        );
+        fs2.writeFileSync(path2.join(stateDir, "openclaw-config.json"), JSON.stringify(configData.openclawConfig, null, 2), "utf-8");
       }
-      fs2.writeFileSync(
-        path2.join(stateDir, "deploy-config.json"),
-        JSON.stringify(configData, null, 2),
-        "utf-8"
-      );
+      fs2.writeFileSync(path2.join(stateDir, "deploy-config.json"), JSON.stringify(configData, null, 2), "utf-8");
       log("INFO", `Deploy config applied for ${agentId}: ${Object.keys(agentEnv).join(", ") || "no env vars"}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -814,17 +813,9 @@ async function handleUpdateConfig(cmd) {
         }
       }
       if (configData.openclawConfig && typeof configData.openclawConfig === "object") {
-        fs2.writeFileSync(
-          path2.join(stateDir, "openclaw-config.json"),
-          JSON.stringify(configData.openclawConfig, null, 2),
-          "utf-8"
-        );
+        fs2.writeFileSync(path2.join(stateDir, "openclaw-config.json"), JSON.stringify(configData.openclawConfig, null, 2), "utf-8");
       }
-      fs2.writeFileSync(
-        path2.join(stateDir, "deploy-config.json"),
-        JSON.stringify(configData, null, 2),
-        "utf-8"
-      );
+      fs2.writeFileSync(path2.join(stateDir, "deploy-config.json"), JSON.stringify(configData, null, 2), "utf-8");
     }
     if (agent.isolation === "docker" && agent.containerId) {
       await stopContainer(agent.containerId);
@@ -888,22 +879,19 @@ async function shutdownAllAgents() {
   log("INFO", `Shutting down ${agents.size} agent(s)...`);
   const stopPromises = [];
   for (const [agentId, agent] of agents) {
-    if (agent.status !== "running") continue;
+    if (agent.status !== "running")
+      continue;
     log("INFO", `Stopping agent ${agentId}...`);
     if (agent.isolation === "docker" && agent.containerId) {
-      stopPromises.push(
-        stopContainer(agent.containerId).catch((err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          log("WARN", `Failed to stop agent ${agentId}: ${msg}`);
-        })
-      );
+      stopPromises.push(stopContainer(agent.containerId).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        log("WARN", `Failed to stop agent ${agentId}: ${msg}`);
+      }));
     } else if (agent.isolation === "profile") {
-      stopPromises.push(
-        stopProfile(agent.profile).catch((err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          log("WARN", `Failed to stop profile agent ${agentId}: ${msg}`);
-        })
-      );
+      stopPromises.push(stopProfile(agent.profile).catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        log("WARN", `Failed to stop profile agent ${agentId}: ${msg}`);
+      }));
     }
   }
   await Promise.race([
@@ -937,7 +925,8 @@ function saveAgents() {
   }
 }
 async function reconcileAgents() {
-  if (agents.size === 0) return;
+  if (agents.size === 0)
+    return;
   log("INFO", `Reconciling ${agents.size} persisted agent(s) with runtime...`);
   for (const [agentId, agent] of agents) {
     try {
@@ -976,32 +965,28 @@ function fetchConfig(configUrl, config) {
   return new Promise((resolve, reject) => {
     const parsed = new import_node_url.URL(fullUrl);
     const transport = parsed.protocol === "https:" ? https : http;
-    const req = transport.get(
-      fullUrl,
-      {
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          Accept: "application/json"
-        },
-        timeout: 3e4
+    const req = transport.get(fullUrl, {
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        Accept: "application/json"
       },
-      (res) => {
-        const chunks = [];
-        res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => {
-          const body = Buffer.concat(chunks).toString("utf-8");
-          if (res.statusCode === 200) {
-            try {
-              resolve(JSON.parse(body));
-            } catch {
-              reject(new Error(`Invalid JSON in deploy config: ${body.slice(0, 200)}`));
-            }
-          } else {
-            reject(new Error(`Deploy config fetch failed: ${res.statusCode} \u2014 ${body.slice(0, 200)}`));
+      timeout: 3e4
+    }, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => {
+        const body = Buffer.concat(chunks).toString("utf-8");
+        if (res.statusCode === 200) {
+          try {
+            resolve(JSON.parse(body));
+          } catch {
+            reject(new Error(`Invalid JSON in deploy config: ${body.slice(0, 200)}`));
           }
-        });
-      }
-    );
+        } else {
+          reject(new Error(`Deploy config fetch failed: ${res.statusCode} \u2014 ${body.slice(0, 200)}`));
+        }
+      });
+    });
     req.on("error", reject);
     req.on("timeout", () => {
       req.destroy(new Error("Config fetch timeout (30s)"));
@@ -1018,9 +1003,8 @@ function sleep2(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// daemon/src/message-handler.ts
+// daemon/dist/message-handler.js
 var import_node_child_process4 = require("node:child_process");
-var http2 = __toESM(require("node:http"), 1);
 var pendingResponses = [];
 function drainMessageResponses() {
   const responses = [...pendingResponses];
@@ -1045,46 +1029,6 @@ stderr: ${stderr}`));
         resolve({ stdout: stdout ?? "", stderr: stderr ?? "" });
       }
     });
-  });
-}
-function httpPost(url, body, timeoutMs = 12e4) {
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(url);
-    const req = http2.request(
-      {
-        hostname: parsed.hostname,
-        port: parsed.port,
-        path: parsed.pathname,
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(body)
-        },
-        timeout: timeoutMs
-      },
-      (res) => {
-        const chunks = [];
-        res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => {
-          const responseBody = Buffer.concat(chunks).toString("utf-8");
-          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            resolve(responseBody);
-          } else {
-            reject(
-              new Error(
-                `HTTP ${res.statusCode}: ${responseBody.slice(0, 500)}`
-              )
-            );
-          }
-        });
-      }
-    );
-    req.on("error", reject);
-    req.on("timeout", () => {
-      req.destroy(new Error("HTTP request timeout"));
-    });
-    req.write(body);
-    req.end();
   });
 }
 async function processMessages(messages, agentRecords) {
@@ -1114,7 +1058,7 @@ async function handleMessage(msg, agentRecords) {
   if (agent.isolation === "docker" && agent.containerId) {
     await handleDockerMessage(msg, agent.containerId);
   } else if (agent.isolation === "profile") {
-    await handleProfileMessage(msg, msg.agentId, agent.port);
+    await handleProfileMessage(msg, msg.agentId, agent.profile, agent.port);
   } else {
     log("WARN", `Agent ${msg.agentId} has unsupported isolation: ${agent.isolation}`);
     pendingResponses.push({
@@ -1132,18 +1076,20 @@ async function handleDockerMessage(msg, containerId) {
   log("INFO", `Sending message to Docker agent ${msg.agentId} (${containerId.slice(0, 12)})`);
   const sessionId = `sparebox-chat-${msg.agentId.slice(0, 12)}`;
   try {
-    const body = JSON.stringify({
-      sessionKey: "main",
-      message: msg.content
-    });
-    const { stdout } = await run3(runtime, [
+    const { stdout, stderr } = await run3(runtime, [
       "exec",
       containerId,
-      "node",
-      "-e",
-      `const http=require("http");const d=${JSON.stringify(body)};const r=http.request({hostname:"127.0.0.1",port:3000,path:"/api/sessions/send",method:"POST",headers:{"Content-Type":"application/json","Content-Length":Buffer.byteLength(d)},timeout:90000},(s)=>{let b="";s.on("data",(c)=>b+=c);s.on("end",()=>console.log(b))});r.on("error",(e)=>{console.error(e.message);process.exit(1)});r.write(d);r.end()`
+      "openclaw",
+      "agent",
+      "--session-id",
+      sessionId,
+      "--message",
+      msg.content,
+      "--json",
+      "--timeout",
+      "90"
     ], 12e4);
-    const response = parseAgentResponse(stdout);
+    const response = parseAgentResponse(stdout, stderr);
     log("INFO", `Agent ${msg.agentId} responded (${response.length} chars)`);
     pendingResponses.push({
       messageId: msg.id,
@@ -1154,19 +1100,27 @@ async function handleDockerMessage(msg, containerId) {
     throw new Error(`Docker message delivery failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
-async function handleProfileMessage(msg, agentId, port) {
-  log("INFO", `Sending message to profile agent ${agentId} on port ${port}`);
-  const body = JSON.stringify({
-    sessionKey: "main",
-    message: msg.content
-  });
+async function handleProfileMessage(msg, agentId, profileName, port) {
+  const bin = await findOpenclawBinary();
+  if (!bin) {
+    throw new Error("openclaw binary not found \u2014 cannot send message to profile agent");
+  }
+  log("INFO", `Sending message to profile agent ${agentId} (${profileName}) on port ${port}`);
+  const sessionId = `sparebox-chat-${agentId.slice(0, 12)}`;
   try {
-    const responseBody = await httpPost(
-      `http://127.0.0.1:${port}/api/sessions/send`,
-      body,
-      12e4
-    );
-    const response = parseAgentResponse(responseBody);
+    const { stdout, stderr } = await run3(bin, [
+      "--profile",
+      profileName,
+      "agent",
+      "--session-id",
+      sessionId,
+      "--message",
+      msg.content,
+      "--json",
+      "--timeout",
+      "90"
+    ], 12e4);
+    const response = parseAgentResponse(stdout, stderr);
     log("INFO", `Agent ${agentId} responded (${response.length} chars)`);
     pendingResponses.push({
       messageId: msg.id,
@@ -1174,28 +1128,47 @@ async function handleProfileMessage(msg, agentId, port) {
       content: response
     });
   } catch (err) {
-    throw new Error(`Profile agent HTTP failed: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`Profile agent CLI failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
-function parseAgentResponse(stdout) {
+function parseAgentResponse(stdout, stderr) {
   const trimmed = stdout.trim();
   try {
     const data = JSON.parse(trimmed);
-    if (data.reply) return data.reply;
-    if (data.text) return data.text;
-    if (data.content) return data.content;
-    if (data.message) return data.message;
-    if (data.output) return data.output;
-    if (data.response) return data.response;
-    if (typeof data === "string") return data;
+    if (data.result?.payloads) {
+      const texts = data.result.payloads.map((p) => p.text).filter(Boolean);
+      if (texts.length > 0)
+        return texts.join("\n\n");
+    }
+    if (data.reply)
+      return data.reply;
+    if (data.text)
+      return data.text;
+    if (data.content)
+      return data.content;
+    if (data.message)
+      return data.message;
+    if (data.output)
+      return data.output;
+    if (data.response)
+      return data.response;
+    if (typeof data === "string")
+      return data;
+    if (data.status === "error" || data.error) {
+      const errMsg = data.error || data.message || data.summary || "Unknown error";
+      return `[System] Agent error: ${errMsg}`;
+    }
     return JSON.stringify(data, null, 2);
   } catch {
-    if (trimmed.length > 0) return trimmed;
+    if (trimmed.length > 0)
+      return trimmed;
+    if (stderr?.trim())
+      return `[System] Agent error: ${stderr.trim()}`;
     return "[Agent returned empty response]";
   }
 }
 
-// daemon/src/heartbeat.ts
+// daemon/dist/heartbeat.js
 var MIN_BACKOFF_MS = 1e3;
 var MAX_BACKOFF_MS = 3e5;
 var backoffMs = MIN_BACKOFF_MS;
@@ -1221,33 +1194,29 @@ function detectOpenclawVersion() {
   }
 }
 detectOpenclawVersion();
-function request2(url, options, body) {
+function request(url, options, body) {
   return new Promise((resolve, reject) => {
     const parsed = new import_node_url2.URL(url);
-    const transport = parsed.protocol === "https:" ? https2 : http3;
-    const req = transport.request(
-      url,
-      {
-        ...options,
-        method: "POST",
-        headers: {
-          ...options.headers,
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(body)
-        }
-      },
-      (res) => {
-        const chunks = [];
-        res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => {
-          resolve({
-            statusCode: res.statusCode ?? 0,
-            headers: res.headers,
-            body: Buffer.concat(chunks).toString("utf-8")
-          });
-        });
+    const transport = parsed.protocol === "https:" ? https2 : http2;
+    const req = transport.request(url, {
+      ...options,
+      method: "POST",
+      headers: {
+        ...options.headers,
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body)
       }
-    );
+    }, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => {
+        resolve({
+          statusCode: res.statusCode ?? 0,
+          headers: res.headers,
+          body: Buffer.concat(chunks).toString("utf-8")
+        });
+      });
+    });
     req.on("error", reject);
     req.setTimeout(3e4, () => {
       req.destroy(new Error("Request timeout (30s)"));
@@ -1289,7 +1258,7 @@ async function sendHeartbeat(config, daemonVersion) {
   const url = `${config.apiUrl}/api/hosts/heartbeat`;
   const body = JSON.stringify(payload);
   try {
-    const res = await request2(url, {
+    const res = await request(url, {
       headers: {
         Authorization: `Bearer ${config.apiKey}`
       }
@@ -1299,10 +1268,7 @@ async function sendHeartbeat(config, daemonVersion) {
       const data = JSON.parse(res.body);
       const ackInfo = commandAcks.length > 0 ? `, sent ${commandAcks.length} ack(s)` : "";
       const msgInfo = messageResponses.length > 0 ? `, sent ${messageResponses.length} msg response(s)` : "";
-      log(
-        "INFO",
-        `Heartbeat sent (CPU: ${cpuUsage}%, RAM: ${ramUsage}%, Disk: ${diskUsage === -1 ? "N/A" : diskUsage + "%"}, agents: ${getAgentCount()}${ackInfo}${msgInfo})`
-      );
+      log("INFO", `Heartbeat sent (CPU: ${cpuUsage}%, RAM: ${ramUsage}%, Disk: ${diskUsage === -1 ? "N/A" : diskUsage + "%"}, agents: ${getAgentCount()}${ackInfo}${msgInfo})`);
       if (data.commands && data.commands.length > 0) {
         log("INFO", `Received ${data.commands.length} command(s) from platform`);
         processCommands(data.commands).then((acks) => {
@@ -1328,30 +1294,38 @@ async function sendHeartbeat(config, daemonVersion) {
     if (res.statusCode === 401 || res.statusCode === 403) {
       log("ERROR", `Authentication failed (${res.statusCode}). Check your API key.`);
       log("ERROR", "Heartbeats stopped \u2014 fix your API key and restart the daemon.");
-      if (commandAcks.length > 0) queueAcks(commandAcks);
-      if (messageResponses.length > 0) queueMessageResponses(messageResponses);
+      if (commandAcks.length > 0)
+        queueAcks(commandAcks);
+      if (messageResponses.length > 0)
+        queueMessageResponses(messageResponses);
       return null;
     }
     if (res.statusCode === 429) {
       const retryAfter = res.headers["retry-after"];
       const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1e3 : nextBackoff();
       log("WARN", `Rate limited (429). Retrying in ${Math.round(waitMs / 1e3)}s`);
-      if (commandAcks.length > 0) queueAcks(commandAcks);
-      if (messageResponses.length > 0) queueMessageResponses(messageResponses);
+      if (commandAcks.length > 0)
+        queueAcks(commandAcks);
+      if (messageResponses.length > 0)
+        queueMessageResponses(messageResponses);
       await sleep3(waitMs);
       return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: waitMs };
     }
     if (res.statusCode >= 500) {
       const wait2 = nextBackoff();
       log("WARN", `Server error (${res.statusCode}). Retrying in ${Math.round(wait2 / 1e3)}s`);
-      if (commandAcks.length > 0) queueAcks(commandAcks);
-      if (messageResponses.length > 0) queueMessageResponses(messageResponses);
+      if (commandAcks.length > 0)
+        queueAcks(commandAcks);
+      if (messageResponses.length > 0)
+        queueMessageResponses(messageResponses);
       await sleep3(wait2);
       return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: wait2 };
     }
     log("WARN", `Unexpected response: ${res.statusCode} \u2014 ${res.body.slice(0, 200)}`);
-    if (commandAcks.length > 0) queueAcks(commandAcks);
-    if (messageResponses.length > 0) queueMessageResponses(messageResponses);
+    if (commandAcks.length > 0)
+      queueAcks(commandAcks);
+    if (messageResponses.length > 0)
+      queueMessageResponses(messageResponses);
     const wait = nextBackoff();
     await sleep3(wait);
     return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: wait };
@@ -1359,8 +1333,10 @@ async function sendHeartbeat(config, daemonVersion) {
     const wait = nextBackoff();
     const msg = err instanceof Error ? err.message : String(err);
     log("WARN", `Heartbeat failed: ${msg} \u2014 retrying in ${Math.round(wait / 1e3)}s (attempt ${consecutiveFailures})`);
-    if (commandAcks.length > 0) queueAcks(commandAcks);
-    if (messageResponses.length > 0) queueMessageResponses(messageResponses);
+    if (commandAcks.length > 0)
+      queueAcks(commandAcks);
+    if (messageResponses.length > 0)
+      queueMessageResponses(messageResponses);
     await sleep3(wait);
     return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: wait };
   }
@@ -1373,13 +1349,15 @@ function startHeartbeatLoop(config, daemonVersion) {
     return Math.floor(Math.random() * 1e4) - 5e3;
   }
   async function tick() {
-    if (!running) return;
+    if (!running)
+      return;
     const result = await sendHeartbeat(config, daemonVersion);
     if (result === null) {
       running = false;
       return;
     }
-    if (!running) return;
+    if (!running)
+      return;
     const interval = result.nextHeartbeatMs > 0 ? Math.max(result.nextHeartbeatMs, 3e4) : config.heartbeatIntervalMs;
     const nextMs = interval + jitter();
     loopTimer = setTimeout(() => void tick(), Math.max(nextMs, 5e3));
@@ -1397,7 +1375,7 @@ function sleep3(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// daemon/src/index.ts
+// daemon/dist/index.js
 var import_meta = {};
 function getDaemonVersion() {
   try {
@@ -1520,7 +1498,8 @@ async function startDaemon() {
   log("INFO", `Tracked agents: ${getAgentCount()}`);
   let shuttingDown = false;
   async function shutdown(signal) {
-    if (shuttingDown) return;
+    if (shuttingDown)
+      return;
     shuttingDown = true;
     log("INFO", `Received ${signal} \u2014 shutting down gracefully`);
     stopHeartbeatLoop();

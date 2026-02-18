@@ -90,6 +90,7 @@ export function getAgentRecordsForMessaging() {
                 pid: agent.pid,
                 isolation: agent.isolation,
                 port: agent.port,
+                profile: agent.profile,
             });
         }
     }
@@ -165,11 +166,29 @@ async function handleDeploy(cmd) {
     if (payload.configUrl && daemonConfig) {
         try {
             const configData = await fetchConfig(payload.configUrl, daemonConfig);
+            // 1. Merge environment variables (API keys, model, etc.)
             if (configData.env) {
                 agentEnv = { ...agentEnv, ...configData.env };
             }
-            // Write config to state dir for the agent to read
+            // 2. Write workspace files to agent workspace directory
+            if (configData.workspaceFiles && typeof configData.workspaceFiles === "object") {
+                for (const [filename, content] of Object.entries(configData.workspaceFiles)) {
+                    if (typeof content === "string") {
+                        const filePath = path.join(workspaceDir, filename);
+                        // Ensure subdirectories exist
+                        ensureDir(path.dirname(filePath));
+                        fs.writeFileSync(filePath, content, "utf-8");
+                        log("INFO", `Wrote workspace file: ${filename} (${content.length} bytes)`);
+                    }
+                }
+            }
+            // 3. Write OpenClaw config to state directory
+            if (configData.openclawConfig && typeof configData.openclawConfig === "object") {
+                fs.writeFileSync(path.join(stateDir, "openclaw-config.json"), JSON.stringify(configData.openclawConfig, null, 2), "utf-8");
+            }
+            // 4. Write full deploy config for reference
             fs.writeFileSync(path.join(stateDir, "deploy-config.json"), JSON.stringify(configData, null, 2), "utf-8");
+            log("INFO", `Deploy config applied for ${agentId}: ${Object.keys(agentEnv).join(", ") || "no env vars"}`);
         }
         catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
@@ -341,10 +360,31 @@ async function handleUpdateConfig(cmd) {
     }
     try {
         // Fetch new config
+        let newEnv = {};
         if (cmd.payload.configUrl && daemonConfig) {
             const configData = await fetchConfig(cmd.payload.configUrl, daemonConfig);
             const stateDir = path.join(AGENTS_DIR, cmd.agentId, "state");
+            const workspaceDir = path.join(AGENTS_DIR, cmd.agentId, "workspace");
             ensureDir(stateDir);
+            ensureDir(workspaceDir);
+            // Extract env vars
+            if (configData.env) {
+                newEnv = { ...configData.env };
+            }
+            // Update workspace files
+            if (configData.workspaceFiles && typeof configData.workspaceFiles === "object") {
+                for (const [filename, content] of Object.entries(configData.workspaceFiles)) {
+                    if (typeof content === "string") {
+                        const filePath = path.join(workspaceDir, filename);
+                        ensureDir(path.dirname(filePath));
+                        fs.writeFileSync(filePath, content, "utf-8");
+                    }
+                }
+            }
+            // Update openclaw config
+            if (configData.openclawConfig && typeof configData.openclawConfig === "object") {
+                fs.writeFileSync(path.join(stateDir, "openclaw-config.json"), JSON.stringify(configData.openclawConfig, null, 2), "utf-8");
+            }
             fs.writeFileSync(path.join(stateDir, "deploy-config.json"), JSON.stringify(configData, null, 2), "utf-8");
         }
         // Restart the agent to pick up new config
@@ -355,7 +395,7 @@ async function handleUpdateConfig(cmd) {
         else if (agent.isolation === "profile") {
             await stopProfile(agent.profile);
             await sleep(1000);
-            const pid = await startProfile(agent.profile, agent.port, {});
+            const pid = await startProfile(agent.profile, agent.port, newEnv);
             agent.pid = pid;
         }
         agent.status = "running";

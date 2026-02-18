@@ -2,17 +2,17 @@
  * Message Handler — bridges chat messages from the Sparebox platform
  * to running OpenClaw agent instances.
  *
- * For docker-mode: uses `docker exec <containerId> openclaw sessions send ...`
- * For profile-mode: sends message via the running gateway's HTTP API
+ * For docker-mode: uses `docker exec <containerId> openclaw agent --message ...`
+ * For profile-mode: uses `openclaw --profile <name> agent --message ...`
  *
  * Messages arrive via heartbeat response, are processed asynchronously,
  * and responses are queued for the next heartbeat.
  */
 
 import { execFile } from "node:child_process";
-import * as http from "node:http";
 import { log } from "./log.js";
 import { detectRuntime } from "./docker.js";
+import { findOpenclawBinary } from "./profile-fallback.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -78,57 +78,6 @@ function run(
 }
 
 // ---------------------------------------------------------------------------
-// HTTP helper for profile mode
-// ---------------------------------------------------------------------------
-
-function httpPost(
-  url: string,
-  body: string,
-  timeoutMs = 120_000
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(url);
-    const req = http.request(
-      {
-        hostname: parsed.hostname,
-        port: parsed.port,
-        path: parsed.pathname,
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(body),
-        },
-        timeout: timeoutMs,
-      },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on("data", (chunk: Buffer) => chunks.push(chunk));
-        res.on("end", () => {
-          const responseBody = Buffer.concat(chunks).toString("utf-8");
-          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            resolve(responseBody);
-          } else {
-            reject(
-              new Error(
-                `HTTP ${res.statusCode}: ${responseBody.slice(0, 500)}`
-              )
-            );
-          }
-        });
-      }
-    );
-
-    req.on("error", reject);
-    req.on("timeout", () => {
-      req.destroy(new Error("HTTP request timeout"));
-    });
-
-    req.write(body);
-    req.end();
-  });
-}
-
-// ---------------------------------------------------------------------------
 // Message processing
 // ---------------------------------------------------------------------------
 
@@ -138,7 +87,7 @@ function httpPost(
  */
 export async function processMessages(
   messages: IncomingMessage[],
-  agentRecords: Map<string, { containerId: string | null; pid: number | null; isolation: string; port: number }>
+  agentRecords: Map<string, { containerId: string | null; pid: number | null; isolation: string; port: number; profile: string }>
 ): Promise<void> {
   for (const msg of messages) {
     // Don't await — process in parallel, queue responses individually
@@ -157,7 +106,7 @@ export async function processMessages(
 
 async function handleMessage(
   msg: IncomingMessage,
-  agentRecords: Map<string, { containerId: string | null; pid: number | null; isolation: string; port: number }>
+  agentRecords: Map<string, { containerId: string | null; pid: number | null; isolation: string; port: number; profile: string }>
 ): Promise<void> {
   const agent = agentRecords.get(msg.agentId);
 
@@ -174,7 +123,7 @@ async function handleMessage(
   if (agent.isolation === "docker" && agent.containerId) {
     await handleDockerMessage(msg, agent.containerId);
   } else if (agent.isolation === "profile") {
-    await handleProfileMessage(msg, msg.agentId, agent.port);
+    await handleProfileMessage(msg, msg.agentId, agent.profile, agent.port);
   } else {
     log("WARN", `Agent ${msg.agentId} has unsupported isolation: ${agent.isolation}`);
     pendingResponses.push({
@@ -186,11 +135,10 @@ async function handleMessage(
 }
 
 /**
- * Send message to a Docker-based agent via docker exec.
+ * Send message to a Docker-based agent via `docker exec` + openclaw CLI.
  *
- * Tries multiple approaches:
- * 1. `openclaw sessions send` (if the gateway is running inside the container)
- * 2. Falls back to raw `openclaw agent --message` if available
+ * The OpenClaw gateway inside the container doesn't have a REST API —
+ * it uses WebSocket. The CLI (`openclaw agent`) connects via WS internally.
  */
 async function handleDockerMessage(msg: IncomingMessage, containerId: string): Promise<void> {
   const runtime = await detectRuntime();
@@ -203,23 +151,17 @@ async function handleDockerMessage(msg: IncomingMessage, containerId: string): P
   // Use a stable session ID per agent so conversation persists
   const sessionId = `sparebox-chat-${msg.agentId.slice(0, 12)}`;
 
-  // Try approach 1: send via the sessions API within the container
-  // OpenClaw gateway inside Docker listens on port 3000
   try {
-    const body = JSON.stringify({
-      sessionKey: "main",
-      message: msg.content,
-    });
-
-    // The container maps port internally, so we use docker exec + curl
-    // or we can hit localhost:<mapped-port> from the host
-    const { stdout } = await run(runtime, [
+    const { stdout, stderr } = await run(runtime, [
       "exec", containerId,
-      "node", "-e",
-      `const http=require("http");const d=${JSON.stringify(body)};const r=http.request({hostname:"127.0.0.1",port:3000,path:"/api/sessions/send",method:"POST",headers:{"Content-Type":"application/json","Content-Length":Buffer.byteLength(d)},timeout:90000},(s)=>{let b="";s.on("data",(c)=>b+=c);s.on("end",()=>console.log(b))});r.on("error",(e)=>{console.error(e.message);process.exit(1)});r.write(d);r.end()`,
+      "openclaw", "agent",
+      "--session-id", sessionId,
+      "--message", msg.content,
+      "--json",
+      "--timeout", "90",
     ], 120_000);
 
-    const response = parseAgentResponse(stdout);
+    const response = parseAgentResponse(stdout, stderr);
     log("INFO", `Agent ${msg.agentId} responded (${response.length} chars)`);
 
     pendingResponses.push({
@@ -233,27 +175,41 @@ async function handleDockerMessage(msg: IncomingMessage, containerId: string): P
 }
 
 /**
- * Send message to a profile-based agent via its gateway HTTP API.
+ * Send message to a profile-based agent via the openclaw CLI.
  *
  * Profile agents run as OpenClaw gateway instances on a specific port.
- * We send messages via HTTP POST to the sessions API.
+ * We use `openclaw --profile <name> agent --message ...` to send messages
+ * through the running gateway via its WebSocket connection.
  */
-async function handleProfileMessage(msg: IncomingMessage, agentId: string, port: number): Promise<void> {
-  log("INFO", `Sending message to profile agent ${agentId} on port ${port}`);
+async function handleProfileMessage(
+  msg: IncomingMessage,
+  agentId: string,
+  profileName: string,
+  port: number
+): Promise<void> {
+  const bin = await findOpenclawBinary();
+  if (!bin) {
+    throw new Error("openclaw binary not found — cannot send message to profile agent");
+  }
 
-  const body = JSON.stringify({
-    sessionKey: "main",
-    message: msg.content,
-  });
+  log("INFO", `Sending message to profile agent ${agentId} (${profileName}) on port ${port}`);
+
+  // Use a stable session ID per agent so conversation persists
+  const sessionId = `sparebox-chat-${agentId.slice(0, 12)}`;
 
   try {
-    const responseBody = await httpPost(
-      `http://127.0.0.1:${port}/api/sessions/send`,
-      body,
-      120_000
-    );
+    // Use the openclaw CLI to send via the profile's gateway
+    // The --profile flag tells the CLI which gateway to connect to
+    const { stdout, stderr } = await run(bin, [
+      "--profile", profileName,
+      "agent",
+      "--session-id", sessionId,
+      "--message", msg.content,
+      "--json",
+      "--timeout", "90",
+    ], 120_000);
 
-    const response = parseAgentResponse(responseBody);
+    const response = parseAgentResponse(stdout, stderr);
     log("INFO", `Agent ${agentId} responded (${response.length} chars)`);
 
     pendingResponses.push({
@@ -262,33 +218,57 @@ async function handleProfileMessage(msg: IncomingMessage, agentId: string, port:
       content: response,
     });
   } catch (err) {
-    throw new Error(`Profile agent HTTP failed: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(`Profile agent CLI failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
 /**
- * Parse the response from the sessions API or agent CLI.
- * The sessions API may return JSON with a `reply`, `text`, or `content` field.
+ * Parse the response from the openclaw CLI (JSON output).
+ *
+ * The CLI with --json returns:
+ * {
+ *   "runId": "...",
+ *   "status": "ok",
+ *   "result": {
+ *     "payloads": [{ "text": "response text" }]
+ *   }
+ * }
  */
-function parseAgentResponse(stdout: string): string {
+function parseAgentResponse(stdout: string, stderr?: string): string {
   const trimmed = stdout.trim();
 
-  // Try JSON parse first
+  // Try JSON parse first (expected from --json flag)
   try {
     const data = JSON.parse(trimmed);
+
+    // Standard openclaw agent --json response format
+    if (data.result?.payloads) {
+      const texts = data.result.payloads
+        .map((p: { text?: string }) => p.text)
+        .filter(Boolean);
+      if (texts.length > 0) return texts.join("\n\n");
+    }
+
+    // Fallback: try common fields
     if (data.reply) return data.reply;
     if (data.text) return data.text;
     if (data.content) return data.content;
     if (data.message) return data.message;
     if (data.output) return data.output;
     if (data.response) return data.response;
-    // If it's a string
     if (typeof data === "string") return data;
-    // Fallback: stringify it
+
+    // If status is error, report it
+    if (data.status === "error" || data.error) {
+      const errMsg = data.error || data.message || data.summary || "Unknown error";
+      return `[System] Agent error: ${errMsg}`;
+    }
+
     return JSON.stringify(data, null, 2);
   } catch {
-    // Not JSON — return raw stdout (might be plain text response)
+    // Not JSON — return raw stdout
     if (trimmed.length > 0) return trimmed;
+    if (stderr?.trim()) return `[System] Agent error: ${stderr.trim()}`;
     return "[Agent returned empty response]";
   }
 }
