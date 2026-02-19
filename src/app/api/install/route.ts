@@ -86,63 +86,196 @@ if [ "\$DOCKER_AVAILABLE" = false ] && command -v podman &> /dev/null; then
     fi
 fi
 
-# Attempt rootless Docker install if nothing found
+# Attempt Docker install if nothing found
 if [ "\$DOCKER_AVAILABLE" = false ] && [ "\$PODMAN_AVAILABLE" = false ]; then
     echo -e "\${YELLOW}No container runtime found.\${NC}"
     echo ""
     echo "  Docker provides strong isolation between agents on your machine."
     echo "  Without it, agents run with limited isolation (shared filesystem)."
     echo ""
-    printf "Attempt to install Docker rootless (no sudo needed)? (Y/n): "
-    read INSTALL_DOCKER < /dev/tty
 
-    if [ "\$INSTALL_DOCKER" != "n" ] && [ "\$INSTALL_DOCKER" != "N" ]; then
+    OS_TYPE=\$(uname -s)
+
+    if [ "\$OS_TYPE" = "Darwin" ]; then
+        # macOS — Docker Desktop required
+        echo "  On macOS, Docker Desktop is required for container isolation."
         echo ""
-        echo -e "\${BLUE}Installing Docker rootless...\${NC}"
-        echo "  This may take a few minutes."
-        echo ""
 
-        # Check prerequisites
-        DOCKER_PREREQS_OK=true
-
-        if ! command -v newuidmap &>/dev/null; then
-            echo -e "\${YELLOW}⚠ newuidmap not found. Required for rootless Docker.\${NC}"
-            echo "  Install with: sudo apt install uidmap"
-            DOCKER_PREREQS_OK=false
-        fi
-
-        if [ ! -f /etc/subuid ] || ! grep -q "^\$(whoami):" /etc/subuid 2>/dev/null; then
-            echo -e "\${YELLOW}⚠ /etc/subuid not configured for \$(whoami).\${NC}"
-            echo "  Ask an admin to add: \$(whoami):100000:65536"
-            DOCKER_PREREQS_OK=false
-        fi
-
-        if [ "\$DOCKER_PREREQS_OK" = true ]; then
-            if curl -fsSL https://get.docker.com/rootless | sh 2>&1; then
-                # Add Docker to PATH for this session
-                export PATH="\$HOME/bin:\$PATH"
-                export DOCKER_HOST="unix:///run/user/\$(id -u)/docker.sock"
-
-                # Persist in .bashrc
-                if ! grep -q "DOCKER_HOST" "\$HOME/.bashrc" 2>/dev/null; then
-                    echo 'export PATH="\$HOME/bin:\$PATH"' >> "\$HOME/.bashrc"
-                    echo "export DOCKER_HOST=unix:///run/user/\$(id -u)/docker.sock" >> "\$HOME/.bashrc"
+        # Check if Docker Desktop is installed but not running
+        if [ -d "/Applications/Docker.app" ]; then
+            echo -e "\${YELLOW}⚠\${NC} Docker Desktop is installed but not running."
+            printf "Start Docker Desktop now? (Y/n): "
+            read START_DOCKER < /dev/tty
+            if [ "\$START_DOCKER" != "n" ] && [ "\$START_DOCKER" != "N" ]; then
+                echo -e "\${BLUE}Starting Docker Desktop...\${NC}"
+                open -a Docker
+                echo "  Waiting for Docker to start (this can take 30-60 seconds)..."
+                for i in \$(seq 1 60); do
+                    if docker info &>/dev/null 2>&1; then
+                        DOCKER_AVAILABLE=true
+                        ISOLATION_MODE="docker"
+                        echo -e "\${GREEN}✓\${NC} Docker Desktop is running!"
+                        break
+                    fi
+                    sleep 2
+                done
+                if [ "\$DOCKER_AVAILABLE" = false ]; then
+                    echo -e "\${YELLOW}⚠\${NC} Docker Desktop is still starting. Re-run the installer once it's ready."
                 fi
-
-                if docker info &>/dev/null 2>&1; then
-                    DOCKER_AVAILABLE=true
-                    ISOLATION_MODE="docker"
-                    echo -e "\${GREEN}✓\${NC} Docker rootless installed successfully!"
-                else
-                    echo -e "\${YELLOW}⚠ Docker installed but not yet functional.\${NC}"
-                    echo "  Try restarting your shell and running the installer again."
-                fi
-            else
-                echo -e "\${YELLOW}⚠ Docker rootless install failed.\${NC}"
             fi
         else
-            echo -e "\${YELLOW}⚠ Prerequisites not met. Skipping Docker install.\${NC}"
-            echo "  Install prerequisites first, then re-run this script."
+            # Check if Homebrew is available for install
+            if command -v brew &>/dev/null; then
+                printf "Install Docker Desktop via Homebrew? (Y/n): "
+                read INSTALL_DOCKER < /dev/tty
+                if [ "\$INSTALL_DOCKER" != "n" ] && [ "\$INSTALL_DOCKER" != "N" ]; then
+                    echo -e "\${BLUE}Installing Docker Desktop via Homebrew...\${NC}"
+                    echo "  This may take a few minutes."
+                    if brew install --cask docker 2>&1; then
+                        echo -e "\${GREEN}✓\${NC} Docker Desktop installed!"
+                        echo -e "\${BLUE}Starting Docker Desktop...\${NC}"
+                        open -a Docker
+                        echo "  Waiting for Docker to start (this can take 30-60 seconds)..."
+                        for i in \$(seq 1 60); do
+                            if docker info &>/dev/null 2>&1; then
+                                DOCKER_AVAILABLE=true
+                                ISOLATION_MODE="docker"
+                                echo -e "\${GREEN}✓\${NC} Docker Desktop is running!"
+                                break
+                            fi
+                            sleep 2
+                        done
+                        if [ "\$DOCKER_AVAILABLE" = false ]; then
+                            echo -e "\${YELLOW}⚠\${NC} Docker Desktop is still starting."
+                            echo "  Open Docker Desktop manually, then re-run the installer."
+                        fi
+                    else
+                        echo -e "\${YELLOW}⚠\${NC} Homebrew install failed."
+                        echo "  Download Docker Desktop from: https://docker.com/products/docker-desktop"
+                    fi
+                fi
+            else
+                echo "  Install options:"
+                echo "    1. Download from: https://docker.com/products/docker-desktop"
+                echo "    2. Install Homebrew first: https://brew.sh"
+                echo "       Then run: brew install --cask docker"
+                echo ""
+                printf "Continue without Docker? (Y/n): "
+                read SKIP_DOCKER < /dev/tty
+                if [ "\$SKIP_DOCKER" = "n" ] || [ "\$SKIP_DOCKER" = "N" ]; then
+                    echo "Install Docker Desktop and re-run: curl -fsSL https://www.sparebox.dev/api/install | bash"
+                    exit 0
+                fi
+            fi
+        fi
+    else
+        # Linux — rootless Docker
+        printf "Attempt to install Docker rootless (no sudo needed)? (Y/n): "
+        read INSTALL_DOCKER < /dev/tty
+
+        if [ "\$INSTALL_DOCKER" != "n" ] && [ "\$INSTALL_DOCKER" != "N" ]; then
+            echo ""
+            echo -e "\${BLUE}Installing Docker rootless...\${NC}"
+            echo "  This may take a few minutes."
+            echo ""
+
+            # Check prerequisites
+            DOCKER_PREREQS_OK=true
+            MISSING_PKGS=""
+
+            if ! command -v newuidmap &>/dev/null; then
+                echo -e "\${YELLOW}⚠\${NC} newuidmap not found (required for rootless Docker)"
+                DOCKER_PREREQS_OK=false
+                MISSING_PKGS="uidmap"
+            fi
+
+            if ! command -v slirp4netns &>/dev/null; then
+                echo -e "\${YELLOW}⚠\${NC} slirp4netns not found (required for rootless networking)"
+                DOCKER_PREREQS_OK=false
+                MISSING_PKGS="\$MISSING_PKGS slirp4netns"
+            fi
+
+            if [ ! -f /etc/subuid ] || ! grep -q "^\$(whoami):" /etc/subuid 2>/dev/null; then
+                echo -e "\${YELLOW}⚠\${NC} /etc/subuid not configured for \$(whoami)"
+                DOCKER_PREREQS_OK=false
+            fi
+
+            if [ "\$DOCKER_PREREQS_OK" = false ] && [ -n "\$MISSING_PKGS" ]; then
+                echo ""
+                echo "  Missing packages:\$MISSING_PKGS"
+                echo ""
+
+                # Try to install missing packages
+                if command -v apt-get &>/dev/null; then
+                    printf "Install missing packages with sudo? (Y/n): "
+                    read INSTALL_PKGS < /dev/tty
+                    if [ "\$INSTALL_PKGS" != "n" ] && [ "\$INSTALL_PKGS" != "N" ]; then
+                        echo -e "\${BLUE}Installing:\$MISSING_PKGS\${NC}"
+                        if sudo apt-get update -qq && sudo apt-get install -y -qq \$MISSING_PKGS; then
+                            echo -e "\${GREEN}✓\${NC} Packages installed"
+                            # Re-check newuidmap
+                            if command -v newuidmap &>/dev/null; then
+                                DOCKER_PREREQS_OK=true
+                            fi
+                        else
+                            echo -e "\${YELLOW}⚠\${NC} Package install failed"
+                        fi
+                    fi
+                elif command -v dnf &>/dev/null; then
+                    printf "Install missing packages with sudo? (Y/n): "
+                    read INSTALL_PKGS < /dev/tty
+                    if [ "\$INSTALL_PKGS" != "n" ] && [ "\$INSTALL_PKGS" != "N" ]; then
+                        echo -e "\${BLUE}Installing: shadow-utils slirp4netns\${NC}"
+                        if sudo dnf install -y shadow-utils slirp4netns; then
+                            DOCKER_PREREQS_OK=true
+                        fi
+                    fi
+                else
+                    echo "  Install manually: sudo apt install\$MISSING_PKGS"
+                fi
+            fi
+
+            # Check/fix subuid
+            if [ ! -f /etc/subuid ] || ! grep -q "^\$(whoami):" /etc/subuid 2>/dev/null; then
+                echo ""
+                echo -e "\${YELLOW}⚠\${NC} /etc/subuid not configured for \$(whoami)"
+                printf "Configure subuid/subgid with sudo? (Y/n): "
+                read FIX_SUBUID < /dev/tty
+                if [ "\$FIX_SUBUID" != "n" ] && [ "\$FIX_SUBUID" != "N" ]; then
+                    if sudo sh -c "echo \$(whoami):100000:65536 >> /etc/subuid && echo \$(whoami):100000:65536 >> /etc/subgid"; then
+                        echo -e "\${GREEN}✓\${NC} subuid/subgid configured"
+                        DOCKER_PREREQS_OK=true
+                    else
+                        echo -e "\${YELLOW}⚠\${NC} Failed to configure subuid/subgid"
+                    fi
+                fi
+            fi
+
+            if [ "\$DOCKER_PREREQS_OK" = true ]; then
+                if curl -fsSL https://get.docker.com/rootless | sh 2>&1; then
+                    export PATH="\$HOME/bin:\$PATH"
+                    export DOCKER_HOST="unix:///run/user/\$(id -u)/docker.sock"
+
+                    if ! grep -q "DOCKER_HOST" "\$HOME/.bashrc" 2>/dev/null; then
+                        echo 'export PATH="\$HOME/bin:\$PATH"' >> "\$HOME/.bashrc"
+                        echo "export DOCKER_HOST=unix:///run/user/\$(id -u)/docker.sock" >> "\$HOME/.bashrc"
+                    fi
+
+                    if docker info &>/dev/null 2>&1; then
+                        DOCKER_AVAILABLE=true
+                        ISOLATION_MODE="docker"
+                        echo -e "\${GREEN}✓\${NC} Docker rootless installed successfully!"
+                    else
+                        echo -e "\${YELLOW}⚠\${NC} Docker installed but not yet functional."
+                        echo "  Try restarting your shell and running the installer again."
+                    fi
+                else
+                    echo -e "\${YELLOW}⚠\${NC} Docker rootless install failed."
+                fi
+            else
+                echo -e "\${YELLOW}⚠\${NC} Prerequisites not met. Skipping Docker install."
+                echo "  Install prerequisites first, then re-run this script."
+            fi
         fi
     fi
 
@@ -262,33 +395,66 @@ echo ""
 echo -e "\${BLUE}System Recommendations\${NC}"
 echo ""
 
-# Check loginctl linger (keeps user services running after logout)
-if command -v loginctl &>/dev/null; then
-    LINGER_STATUS=$(loginctl show-user "\$(whoami)" --property=Linger 2>/dev/null | cut -d= -f2)
-    if [ "\$LINGER_STATUS" = "yes" ]; then
-        echo -e "\${GREEN}✓\${NC} Lingering enabled (services survive logout)"
+SYS_OS=\$(uname -s)
+
+if [ "\$SYS_OS" = "Darwin" ]; then
+    # macOS-specific recommendations
+    RAM_GB=\$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.0f", \$1/1073741824}')
+    if [ "\$RAM_GB" -ge 8 ] 2>/dev/null; then
+        echo -e "\${GREEN}✓\${NC} RAM: \${RAM_GB}GB (sufficient)"
     else
-        echo -e "\${YELLOW}⚠\${NC} Lingering not enabled. Run: loginctl enable-linger \$(whoami)"
-        echo "    (may need sudo — keeps daemon running after SSH disconnect)"
+        echo -e "\${YELLOW}⚠\${NC} RAM: \${RAM_GB}GB (8GB+ recommended for hosting agents)"
     fi
-fi
 
-# Check swap
-SWAP_TOTAL=$(free -m 2>/dev/null | awk '/Swap:/ {print \$2}' || echo "0")
-if [ "\$SWAP_TOTAL" -gt 0 ] 2>/dev/null; then
-    echo -e "\${GREEN}✓\${NC} Swap available: \${SWAP_TOTAL}MB"
-else
-    echo -e "\${YELLOW}⚠\${NC} No swap configured. Recommended: 2GB+ for stability"
-    echo "    sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile"
-    echo "    sudo mkswap /swapfile && sudo swapon /swapfile"
-fi
+    # Check if running on battery
+    if command -v pmset &>/dev/null; then
+        POWER_SOURCE=\$(pmset -g batt 2>/dev/null | head -1 | grep -o "'[^']*'" | tr -d "'")
+        if [ "\$POWER_SOURCE" = "AC Power" ]; then
+            echo -e "\${GREEN}✓\${NC} Running on AC power"
+        else
+            echo -e "\${YELLOW}⚠\${NC} Running on battery. Plug in for stable hosting."
+        fi
+    fi
 
-# Check cgroups v2 (needed for Docker resource limits)
-if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
-    echo -e "\${GREEN}✓\${NC} cgroups v2 enabled (Docker resource limits work)"
+    # Check if sleep is disabled
+    if command -v pmset &>/dev/null; then
+        SLEEP_VAL=\$(pmset -g custom 2>/dev/null | grep '^ sleep' | awk '{print \$2}')
+        if [ "\$SLEEP_VAL" = "0" ]; then
+            echo -e "\${GREEN}✓\${NC} System sleep disabled (good for hosting)"
+        else
+            echo -e "\${YELLOW}⚠\${NC} System may sleep. Prevent with: sudo pmset -a sleep 0"
+        fi
+    fi
 else
-    echo -e "\${YELLOW}⚠\${NC} cgroups v1 detected. Docker resource limits may not work."
-    echo "    Ubuntu 22.04+ defaults to v2. Consider upgrading."
+    # Linux-specific recommendations
+    # Check loginctl linger (keeps user services running after logout)
+    if command -v loginctl &>/dev/null; then
+        LINGER_STATUS=\$(loginctl show-user "\$(whoami)" --property=Linger 2>/dev/null | cut -d= -f2)
+        if [ "\$LINGER_STATUS" = "yes" ]; then
+            echo -e "\${GREEN}✓\${NC} Lingering enabled (services survive logout)"
+        else
+            echo -e "\${YELLOW}⚠\${NC} Lingering not enabled. Run: loginctl enable-linger \$(whoami)"
+            echo "    (may need sudo — keeps daemon running after SSH disconnect)"
+        fi
+    fi
+
+    # Check swap
+    SWAP_TOTAL=\$(free -m 2>/dev/null | awk '/Swap:/ {print \$2}' || echo "0")
+    if [ "\$SWAP_TOTAL" -gt 0 ] 2>/dev/null; then
+        echo -e "\${GREEN}✓\${NC} Swap available: \${SWAP_TOTAL}MB"
+    else
+        echo -e "\${YELLOW}⚠\${NC} No swap configured. Recommended: 2GB+ for stability"
+        echo "    sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile"
+        echo "    sudo mkswap /swapfile && sudo swapon /swapfile"
+    fi
+
+    # Check cgroups v2 (needed for Docker resource limits)
+    if [ -f /sys/fs/cgroup/cgroup.controllers ]; then
+        echo -e "\${GREEN}✓\${NC} cgroups v2 enabled (Docker resource limits work)"
+    else
+        echo -e "\${YELLOW}⚠\${NC} cgroups v1 detected. Docker resource limits may not work."
+        echo "    Ubuntu 22.04+ defaults to v2. Consider upgrading."
+    fi
 fi
 
 # ─────────────────────────────────────────────────
