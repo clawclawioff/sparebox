@@ -33,6 +33,61 @@ echo -e "╚══════════════════════�
 echo ""
 
 # ─────────────────────────────────────────────────
+# Step 0: Detect platform (Windows / WSL / macOS / Linux)
+# ─────────────────────────────────────────────────
+
+IS_WSL=false
+IS_WINDOWS=false
+
+# Detect WSL
+if grep -qi microsoft /proc/version 2>/dev/null || [ -n "\${WSL_DISTRO_NAME:-}" ]; then
+    IS_WSL=true
+    WSL_DISTRO="\${WSL_DISTRO_NAME:-\$(grep -oP 'Microsoft.*\$' /proc/version 2>/dev/null || echo 'unknown')}"
+    echo -e "\${BLUE}Detected: Windows Subsystem for Linux (WSL)\${NC}"
+    echo -e "  Distro: \$WSL_DISTRO"
+    echo ""
+    echo -e "\${GREEN}✓\${NC} WSL is fully supported. Docker Desktop integration recommended."
+    echo ""
+
+    # Check if Docker Desktop WSL integration is available
+    if command -v docker &>/dev/null && docker info &>/dev/null 2>&1; then
+        echo -e "\${GREEN}✓\${NC} Docker Desktop WSL integration detected"
+    else
+        echo -e "\${YELLOW}Note:\${NC} For Docker isolation in WSL:"
+        echo "  1. Install Docker Desktop for Windows: https://docker.com/products/docker-desktop"
+        echo "  2. In Docker Desktop → Settings → Resources → WSL Integration"
+        echo "  3. Enable integration with your WSL distro (\$WSL_DISTRO)"
+        echo ""
+    fi
+fi
+
+# Detect native Windows (Git Bash, MSYS, Cygwin)
+if [ "\$IS_WSL" = false ]; then
+    case "\$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            IS_WINDOWS=true
+            echo -e "\${YELLOW}⚠ Native Windows detected (Git Bash / MSYS / Cygwin)\${NC}"
+            echo ""
+            echo "  For the best experience, we recommend one of these options:"
+            echo ""
+            echo "  Option 1 (Recommended): Use WSL"
+            echo "    wsl --install"
+            echo "    # Then re-run this installer inside WSL"
+            echo ""
+            echo "  Option 2: Use the PowerShell installer"
+            echo "    irm https://www.sparebox.dev/api/install/windows | iex"
+            echo ""
+            printf "Continue with Git Bash anyway? (y/N): "
+            read CONTINUE_WINDOWS < /dev/tty
+            if [ "\$CONTINUE_WINDOWS" != "y" ] && [ "\$CONTINUE_WINDOWS" != "Y" ]; then
+                echo "Exiting. Use one of the options above."
+                exit 0
+            fi
+            ;;
+    esac
+fi
+
+# ─────────────────────────────────────────────────
 # Step 1: Check Node.js
 # ─────────────────────────────────────────────────
 
@@ -96,7 +151,31 @@ if [ "\$DOCKER_AVAILABLE" = false ] && [ "\$PODMAN_AVAILABLE" = false ]; then
 
     OS_TYPE=\$(uname -s)
 
-    if [ "\$OS_TYPE" = "Darwin" ]; then
+    if [ "\$IS_WSL" = true ]; then
+        # WSL — Docker Desktop with WSL integration
+        echo "  In WSL, Docker works best via Docker Desktop for Windows."
+        echo ""
+        echo "  Setup steps:"
+        echo "    1. Install Docker Desktop: https://docker.com/products/docker-desktop"
+        echo "    2. Open Docker Desktop → Settings → Resources → WSL Integration"
+        echo "    3. Enable your WSL distro, then re-run this installer"
+        echo ""
+
+        # Check if Docker Desktop might be installed on Windows side
+        if command -v docker.exe &>/dev/null || [ -f "/mnt/c/Program Files/Docker/Docker/Docker Desktop.exe" ]; then
+            echo -e "\${YELLOW}⚠\${NC} Docker Desktop appears installed on Windows but WSL integration isn't working."
+            echo "  Open Docker Desktop → Settings → Resources → WSL Integration"
+            echo "  Make sure your distro is enabled, then restart Docker Desktop."
+        fi
+
+        printf "Continue without Docker? (Y/n): "
+        read SKIP_DOCKER < /dev/tty
+        if [ "\$SKIP_DOCKER" = "n" ] || [ "\$SKIP_DOCKER" = "N" ]; then
+            echo "Set up Docker Desktop WSL integration, then re-run:"
+            echo "  curl -fsSL https://www.sparebox.dev/api/install | bash"
+            exit 0
+        fi
+    elif [ "\$OS_TYPE" = "Darwin" ]; then
         # macOS — Docker Desktop required
         echo "  On macOS, Docker Desktop is required for container isolation."
         echo ""
@@ -397,7 +476,37 @@ echo ""
 
 SYS_OS=\$(uname -s)
 
-if [ "\$SYS_OS" = "Darwin" ]; then
+if [ "\$IS_WSL" = true ]; then
+    # WSL-specific recommendations
+    RAM_KB=\$(grep MemTotal /proc/meminfo 2>/dev/null | awk '{print \$2}')
+    RAM_GB=\$((RAM_KB / 1048576))
+    if [ "\$RAM_GB" -ge 8 ] 2>/dev/null; then
+        echo -e "\${GREEN}✓\${NC} RAM: \${RAM_GB}GB (sufficient)"
+    else
+        echo -e "\${YELLOW}⚠\${NC} RAM: \${RAM_GB}GB allocated to WSL (8GB+ recommended)"
+        echo "    Increase in: %USERPROFILE%\\\\.wslconfig → [wsl2] memory=8GB"
+    fi
+
+    # Check .wslconfig for swap
+    SWAP_TOTAL=\$(free -m 2>/dev/null | awk '/Swap:/ {print \$2}' || echo "0")
+    if [ "\$SWAP_TOTAL" -gt 0 ] 2>/dev/null; then
+        echo -e "\${GREEN}✓\${NC} Swap available: \${SWAP_TOTAL}MB"
+    else
+        echo -e "\${YELLOW}⚠\${NC} No swap in WSL. Configure in %USERPROFILE%\\\\.wslconfig:"
+        echo "    [wsl2]"
+        echo "    swap=4GB"
+    fi
+
+    # Check systemd support (needed for Docker rootless in WSL)
+    if [ -d /run/systemd/system ]; then
+        echo -e "\${GREEN}✓\${NC} systemd enabled in WSL"
+    else
+        echo -e "\${YELLOW}⚠\${NC} systemd not enabled. Add to /etc/wsl.conf:"
+        echo "    [boot]"
+        echo "    systemd=true"
+        echo "    Then: wsl --shutdown && wsl"
+    fi
+elif [ "\$SYS_OS" = "Darwin" ]; then
     # macOS-specific recommendations
     RAM_GB=\$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.0f", \$1/1073741824}')
     if [ "\$RAM_GB" -ge 8 ] 2>/dev/null; then
