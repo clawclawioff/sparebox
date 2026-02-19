@@ -82,15 +82,14 @@ export async function GET(
   const env: Record<string, string> = {};
 
   if (apiKeyPlaintext) {
-    // Detect provider from key prefix
-    if (apiKeyPlaintext.startsWith("sk-ant-")) {
-      env.ANTHROPIC_API_KEY = apiKeyPlaintext;
-    } else if (apiKeyPlaintext.startsWith("sk-")) {
+    const configProvider = (agentConfig as Record<string, unknown>).provider as string | undefined;
+
+    if (configProvider === "openai" || apiKeyPlaintext.startsWith("sk-") && !apiKeyPlaintext.startsWith("sk-ant-")) {
       env.OPENAI_API_KEY = apiKeyPlaintext;
+      env.OPENCLAW_PROVIDER = "openai";
     } else {
-      // Unknown provider — set both common vars as fallback
       env.ANTHROPIC_API_KEY = apiKeyPlaintext;
-      env.OPENAI_API_KEY = apiKeyPlaintext;
+      env.OPENCLAW_PROVIDER = "anthropic";
     }
   }
 

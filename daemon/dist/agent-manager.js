@@ -254,7 +254,24 @@ async function handleDeploy(cmd) {
                     authProfiles.lastGood["openai"] = "openai:sparebox";
                 }
                 fs.writeFileSync(path.join(agentAuthDir, "auth-profiles.json"), JSON.stringify(authProfiles, null, 2), "utf-8");
-                log("INFO", `Wrote auth profiles for ${profile}`);
+                // Also write openclaw.json for the profile with correct model config
+                const isOpenAI = !!agentEnv.OPENAI_API_KEY && !agentEnv.ANTHROPIC_API_KEY;
+                const openclawConfig = {
+                    auth: {
+                        profiles: isOpenAI
+                            ? { "openai:sparebox": { provider: "openai", mode: "token" } }
+                            : { "anthropic:sparebox": { provider: "anthropic", mode: "token" } },
+                    },
+                    agents: {
+                        defaults: {
+                            model: {
+                                primary: isOpenAI ? "openai/gpt-4o" : "anthropic/claude-sonnet-4-20250514",
+                            },
+                        },
+                    },
+                };
+                fs.writeFileSync(path.join(profileDir, "openclaw.json"), JSON.stringify(openclawConfig, null, 2), "utf-8");
+                log("INFO", `Wrote auth profiles and config for ${profile}`);
             }
             catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);

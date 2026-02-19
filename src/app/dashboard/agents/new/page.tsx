@@ -53,6 +53,7 @@ export default function DeployAgentPage() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  const [provider, setProvider] = useState<"anthropic" | "openai">("anthropic");
   const [isDeploying, setIsDeploying] = useState(false);
   const [error, setError] = useState("");
 
@@ -87,6 +88,7 @@ export default function DeployAgentPage() {
         hostId: selectedHostId,
         tier: selectedTier,
         apiKey: apiKey || undefined,
+        provider,
       });
 
       if (result.url) {
@@ -385,11 +387,42 @@ export default function DeployAgentPage() {
               </p>
             </div>
 
+            {/* LLM Provider */}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
+                LLM Provider
+              </label>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setProvider("anthropic")}
+                  className={`flex-1 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                    provider === "anthropic"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:border-foreground/30"
+                  }`}
+                >
+                  Anthropic (Claude)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProvider("openai")}
+                  className={`flex-1 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                    provider === "openai"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:border-foreground/30"
+                  }`}
+                >
+                  OpenAI (GPT)
+                </button>
+              </div>
+            </div>
+
             {/* LLM API Key */}
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-foreground mb-2">
                 <KeyRound className="w-4 h-4 text-muted-foreground" />
-                LLM API Key
+                {provider === "anthropic" ? "Anthropic" : "OpenAI"} API Key
               </label>
               <div className="relative">
                 <input

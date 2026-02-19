@@ -135,8 +135,9 @@ async function handleCheckoutCompleted(session: any) {
     return;
   }
 
-  const { userId, agentName, hostId, config, tier: metadataTier, apiKey: rawApiKey } = metadata;
+  const { userId, agentName, hostId, config, tier: metadataTier, apiKey: rawApiKey, provider: rawProvider } = metadata;
   const tier = (metadataTier as TierKey) || "standard";
+  const provider = rawProvider || "anthropic";
 
   // Idempotency: check if we already created an agent for this checkout session
   const stripeSubscriptionId = typeof session.subscription === "string"
@@ -214,7 +215,7 @@ async function handleCheckoutCompleted(session: any) {
         name: finalAgentName,
         userId: userId,
         hostId: hostId,
-        config: config ? JSON.parse(config) : {},
+        config: config ? { ...JSON.parse(config), provider } : { provider },
         tier: tier,
         status: "pending",
         ...(rawApiKey ? { encryptedApiKey: encrypt(rawApiKey) } : {}),
