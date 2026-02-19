@@ -5,6 +5,7 @@ import { getStripe } from "@/lib/stripe";
 import { hosts, user, subscriptions, agents } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { PLATFORM_FEE_PERCENT, TIERS, type TierKey } from "@/lib/constants";
+import { encrypt } from "@/lib/encryption";
 
 export const billingRouter = router({
   createCheckoutSession: protectedProcedure
@@ -14,6 +15,7 @@ export const billingRouter = router({
         hostId: z.string().uuid(),
         tier: z.enum(["lite", "standard", "pro", "compute"]).default("standard"),
         config: z.string().optional(),
+        apiKey: z.string().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -95,6 +97,7 @@ export const billingRouter = router({
           hostId: input.hostId,
           tier: input.tier,
           config: input.config || "",
+          apiKey: input.apiKey || "",
         },
         success_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.sparebox.dev"}/dashboard/agents?deployed=true`,
         cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.sparebox.dev"}/dashboard/agents/new`,

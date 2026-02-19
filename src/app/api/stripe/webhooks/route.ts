@@ -6,6 +6,7 @@ import { eq, and } from "drizzle-orm";
 import type Stripe from "stripe";
 import { PLATFORM_FEE_PERCENT, TIERS, type TierKey } from "@/lib/constants";
 import { sendDeploySuccessEmail, sendPaymentFailedEmail } from "@/lib/email/notifications";
+import { encrypt } from "@/lib/encryption";
 
 export async function POST(req: NextRequest) {
   let body: string;
@@ -134,7 +135,7 @@ async function handleCheckoutCompleted(session: any) {
     return;
   }
 
-  const { userId, agentName, hostId, config, tier: metadataTier } = metadata;
+  const { userId, agentName, hostId, config, tier: metadataTier, apiKey: rawApiKey } = metadata;
   const tier = (metadataTier as TierKey) || "standard";
 
   // Idempotency: check if we already created an agent for this checkout session
@@ -216,6 +217,7 @@ async function handleCheckoutCompleted(session: any) {
         config: config ? JSON.parse(config) : {},
         tier: tier,
         status: "pending",
+        ...(rawApiKey ? { encryptedApiKey: encrypt(rawApiKey) } : {}),
       })
       .returning();
 

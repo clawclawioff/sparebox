@@ -86,6 +86,7 @@ export default function DeployAgentPage() {
         agentName: name.trim().toLowerCase().replace(/\s+/g, "-"),
         hostId: selectedHostId,
         tier: selectedTier,
+        apiKey: apiKey || undefined,
       });
 
       if (result.url) {
