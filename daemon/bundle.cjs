@@ -23,12 +23,12 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// daemon/dist/index.js
+// dist/index.js
 var fs3 = __toESM(require("node:fs"), 1);
 var path3 = __toESM(require("node:path"), 1);
 var import_node_url3 = require("node:url");
 
-// daemon/dist/config.js
+// dist/config.js
 var fs = __toESM(require("node:fs"), 1);
 var path = __toESM(require("node:path"), 1);
 var os = __toESM(require("node:os"), 1);
@@ -76,7 +76,7 @@ function validateConfig(config) {
   return errors;
 }
 
-// daemon/dist/metrics.js
+// dist/metrics.js
 var os2 = __toESM(require("node:os"), 1);
 var import_node_child_process = require("node:child_process");
 function snapshotCpu() {
@@ -202,12 +202,12 @@ function getOsInfo() {
   return `${os2.type()} ${os2.release()}`;
 }
 
-// daemon/dist/heartbeat.js
+// dist/heartbeat.js
 var https2 = __toESM(require("node:https"), 1);
 var http2 = __toESM(require("node:http"), 1);
 var import_node_url2 = require("node:url");
 
-// daemon/dist/log.js
+// dist/log.js
 function pad(n) {
   return n.toString().padStart(2, "0");
 }
@@ -226,7 +226,7 @@ function log(level, message) {
   }
 }
 
-// daemon/dist/agent-manager.js
+// dist/agent-manager.js
 var fs2 = __toESM(require("node:fs"), 1);
 var path2 = __toESM(require("node:path"), 1);
 var os3 = __toESM(require("node:os"), 1);
@@ -234,7 +234,7 @@ var https = __toESM(require("node:https"), 1);
 var http = __toESM(require("node:http"), 1);
 var import_node_url = require("node:url");
 
-// daemon/dist/docker.js
+// dist/docker.js
 var import_node_child_process2 = require("node:child_process");
 function run(cmd, args2, timeoutMs = 6e4) {
   return new Promise((resolve, reject) => {
@@ -386,7 +386,7 @@ async function isContainerRunning(id) {
   }
 }
 
-// daemon/dist/profile-fallback.js
+// dist/profile-fallback.js
 var import_node_child_process3 = require("node:child_process");
 function run2(cmd, args2, timeoutMs = 3e4) {
   return new Promise((resolve, reject) => {
@@ -512,7 +512,7 @@ async function killProfile(pid) {
   }
 }
 
-// daemon/dist/agent-manager.js
+// dist/agent-manager.js
 var SPAREBOX_DIR = path2.join(os3.homedir(), ".sparebox");
 var AGENTS_FILE = path2.join(SPAREBOX_DIR, "agents.json");
 var AGENTS_DIR = path2.join(SPAREBOX_DIR, "agents");
@@ -1002,7 +1002,7 @@ function sleep2(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// daemon/dist/message-handler.js
+// dist/message-handler.js
 var import_node_child_process4 = require("node:child_process");
 var pendingResponses = [];
 function drainMessageResponses() {
@@ -1167,7 +1167,7 @@ function parseAgentResponse(stdout, stderr) {
   }
 }
 
-// daemon/dist/heartbeat.js
+// dist/heartbeat.js
 var MIN_BACKOFF_MS = 1e3;
 var MAX_BACKOFF_MS = 3e5;
 var backoffMs = MIN_BACKOFF_MS;
@@ -1374,7 +1374,7 @@ function sleep3(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// daemon/dist/index.js
+// dist/index.js
 var import_meta = {};
 function getDaemonVersion() {
   try {
