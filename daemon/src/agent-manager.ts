@@ -339,6 +339,50 @@ async function handleDeploy(cmd: Command): Promise<CommandAck> {
       log("WARN", `Container ${containerId} did not become healthy in 10s`);
     }
   } else if (isolationMode === "profile") {
+    // Write API key to the profile's auth store before starting
+    if (agentEnv.ANTHROPIC_API_KEY || agentEnv.OPENAI_API_KEY) {
+      try {
+        const { homedir } = await import("node:os");
+        const profileDir = path.join(homedir(), `.openclaw-${profile}`);
+        const agentAuthDir = path.join(profileDir, "agents", "main", "agent");
+        ensureDir(agentAuthDir);
+
+        const authProfiles: Record<string, unknown> = {
+          version: 1,
+          profiles: {} as Record<string, unknown>,
+          lastGood: {} as Record<string, string>,
+        };
+
+        if (agentEnv.ANTHROPIC_API_KEY) {
+          (authProfiles.profiles as Record<string, unknown>)["anthropic:sparebox"] = {
+            type: "token",
+            provider: "anthropic",
+            token: agentEnv.ANTHROPIC_API_KEY,
+          };
+          (authProfiles.lastGood as Record<string, string>)["anthropic"] = "anthropic:sparebox";
+        }
+
+        if (agentEnv.OPENAI_API_KEY) {
+          (authProfiles.profiles as Record<string, unknown>)["openai:sparebox"] = {
+            type: "token",
+            provider: "openai",
+            token: agentEnv.OPENAI_API_KEY,
+          };
+          (authProfiles.lastGood as Record<string, string>)["openai"] = "openai:sparebox";
+        }
+
+        fs.writeFileSync(
+          path.join(agentAuthDir, "auth-profiles.json"),
+          JSON.stringify(authProfiles, null, 2),
+          "utf-8"
+        );
+        log("INFO", `Wrote auth profiles for ${profile}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log("WARN", `Failed to write auth profiles for ${profile}: ${msg}`);
+      }
+    }
+
     pid = await startProfile(profile, port, agentEnv);
   } else {
     return { id, status: "error", error: "No isolation runtime available" };

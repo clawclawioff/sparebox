@@ -225,6 +225,42 @@ async function handleDeploy(cmd) {
         }
     }
     else if (isolationMode === "profile") {
+        // Write API key to the profile's auth store before starting
+        if (agentEnv.ANTHROPIC_API_KEY || agentEnv.OPENAI_API_KEY) {
+            try {
+                const { homedir } = await import("node:os");
+                const profileDir = path.join(homedir(), `.openclaw-${profile}`);
+                const agentAuthDir = path.join(profileDir, "agents", "main", "agent");
+                ensureDir(agentAuthDir);
+                const authProfiles = {
+                    version: 1,
+                    profiles: {},
+                    lastGood: {},
+                };
+                if (agentEnv.ANTHROPIC_API_KEY) {
+                    authProfiles.profiles["anthropic:sparebox"] = {
+                        type: "token",
+                        provider: "anthropic",
+                        token: agentEnv.ANTHROPIC_API_KEY,
+                    };
+                    authProfiles.lastGood["anthropic"] = "anthropic:sparebox";
+                }
+                if (agentEnv.OPENAI_API_KEY) {
+                    authProfiles.profiles["openai:sparebox"] = {
+                        type: "token",
+                        provider: "openai",
+                        token: agentEnv.OPENAI_API_KEY,
+                    };
+                    authProfiles.lastGood["openai"] = "openai:sparebox";
+                }
+                fs.writeFileSync(path.join(agentAuthDir, "auth-profiles.json"), JSON.stringify(authProfiles, null, 2), "utf-8");
+                log("INFO", `Wrote auth profiles for ${profile}`);
+            }
+            catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                log("WARN", `Failed to write auth profiles for ${profile}: ${msg}`);
+            }
+        }
         pid = await startProfile(profile, port, agentEnv);
     }
     else {

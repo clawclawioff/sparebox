@@ -670,6 +670,40 @@ async function handleDeploy(cmd) {
       log("WARN", `Container ${containerId} did not become healthy in 10s`);
     }
   } else if (isolationMode === "profile") {
+    if (agentEnv.ANTHROPIC_API_KEY || agentEnv.OPENAI_API_KEY) {
+      try {
+        const { homedir: homedir3 } = await import("node:os");
+        const profileDir = path2.join(homedir3(), `.openclaw-${profile}`);
+        const agentAuthDir = path2.join(profileDir, "agents", "main", "agent");
+        ensureDir(agentAuthDir);
+        const authProfiles = {
+          version: 1,
+          profiles: {},
+          lastGood: {}
+        };
+        if (agentEnv.ANTHROPIC_API_KEY) {
+          authProfiles.profiles["anthropic:sparebox"] = {
+            type: "token",
+            provider: "anthropic",
+            token: agentEnv.ANTHROPIC_API_KEY
+          };
+          authProfiles.lastGood["anthropic"] = "anthropic:sparebox";
+        }
+        if (agentEnv.OPENAI_API_KEY) {
+          authProfiles.profiles["openai:sparebox"] = {
+            type: "token",
+            provider: "openai",
+            token: agentEnv.OPENAI_API_KEY
+          };
+          authProfiles.lastGood["openai"] = "openai:sparebox";
+        }
+        fs2.writeFileSync(path2.join(agentAuthDir, "auth-profiles.json"), JSON.stringify(authProfiles, null, 2), "utf-8");
+        log("INFO", `Wrote auth profiles for ${profile}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log("WARN", `Failed to write auth profiles for ${profile}: ${msg}`);
+      }
+    }
     pid = await startProfile(profile, port, agentEnv);
   } else {
     return { id, status: "error", error: "No isolation runtime available" };
