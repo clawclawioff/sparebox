@@ -308,7 +308,10 @@ async function createContainer(opts) {
     `${opts.stateDir}:/state`,
     // Tmpfs for /tmp so read-only rootfs still works
     "--tmpfs",
-    "/tmp:rw,noexec,nosuid,size=256m"
+    "/tmp:rw,noexec,nosuid,size=256m",
+    // Tmpfs for OpenClaw home dir (cron, browser state, canvas, etc.)
+    "--tmpfs",
+    "/home/node/.openclaw:rw,noexec,nosuid,size=128m"
   ];
   for (const [key, value] of Object.entries(opts.env)) {
     args2.push("-e", `${key}=${value}`);
