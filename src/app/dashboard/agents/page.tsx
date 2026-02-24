@@ -40,10 +40,25 @@ export default function AgentsPage() {
   const searchParams = useSearchParams();
   const justDeployed = searchParams.get("deployed") === "true";
 
-  const { data: agents, isLoading, refetch } = trpc.agents.list.useQuery();
-  const stopAgent = trpc.agents.stop.useMutation({ onSuccess: () => refetch() });
-  const startAgent = trpc.agents.start.useMutation({ onSuccess: () => refetch() });
-  const deleteAgent = trpc.agents.delete.useMutation({ onSuccess: () => refetch() });
+  const utils = trpc.useUtils();
+  const { data: rawAgents, isLoading } = trpc.agents.list.useQuery();
+  const agents = rawAgents?.filter((a) => a.status !== "deleted");
+  const stopAgent = trpc.agents.stop.useMutation({ onSuccess: () => utils.agents.list.invalidate() });
+  const startAgent = trpc.agents.start.useMutation({ onSuccess: () => utils.agents.list.invalidate() });
+  const deleteAgent = trpc.agents.delete.useMutation({
+    onMutate: async ({ id }) => {
+      await utils.agents.list.cancel();
+      const prev = utils.agents.list.getData();
+      utils.agents.list.setData(undefined, (old) =>
+        old?.filter((a) => a.id !== id)
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prev) utils.agents.list.setData(undefined, context.prev);
+    },
+    onSettled: () => utils.agents.list.invalidate(),
+  });
 
   const handleStop = async (id: string) => {
     if (confirm("Are you sure you want to stop this agent?")) {
