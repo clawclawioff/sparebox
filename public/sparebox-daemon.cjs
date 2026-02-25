@@ -313,6 +313,8 @@ async function createContainer(opts) {
     "--tmpfs",
     "/home/node/.openclaw:rw,noexec,nosuid,size=128m"
   ];
+  // Tell OpenClaw to read config from the mounted state volume
+  args2.push("-e", "OPENCLAW_CONFIG_PATH=/state/openclaw.json");
   for (const [key, value] of Object.entries(opts.env)) {
     args2.push("-e", `${key}=${value}`);
   }
