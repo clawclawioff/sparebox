@@ -88,69 +88,96 @@ function TierBadge({ tier }: { tier: string | null | undefined }) {
 function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: string }) {
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const [lastPollTime, setLastPollTime] = useState<string | undefined>(undefined);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const [messages, setMessages] = useState<Array<{ id: string; agentId: string; role: string; content: string; status: string; createdAt: string }>>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(true);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastMessageIdRef = useRef<string | null>(null);
 
-  // Fetch message history with cursor-based pagination
-  const {
-    data: messageData,
-    refetch: refetchMessages,
-    isLoading: isLoadingMessages,
-  } = trpc.messages.list.useQuery(
-    { agentId, limit: 50 },
-    { enabled: !!agentId }
-  );
-
-  // Poll for new messages every 3 seconds (for any updates)
-  const { data: newMessages } = trpc.messages.poll.useQuery(
-    { agentId, since: lastPollTime },
-    {
-      enabled: !!agentId && !!lastPollTime && !isSending,
-      refetchInterval: 5000, // Slower polling since Chat V2 is instant
+  // Load initial messages
+  const fetchMessages = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/agents/${agentId}/chat/messages`);
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data.messages ?? []);
+        const msgs = data.messages ?? [];
+        if (msgs.length > 0) {
+          lastMessageIdRef.current = msgs[msgs.length - 1].id;
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsLoadingMessages(false);
     }
-  );
+  }, [agentId]);
+
+  useEffect(() => {
+    void fetchMessages();
+  }, [fetchMessages]);
+
+  // Poll for new messages after the last known message
+  const startPolling = useCallback(() => {
+    if (pollTimerRef.current) return;
+    pollTimerRef.current = setInterval(async () => {
+      const afterId = lastMessageIdRef.current;
+      if (!afterId) return;
+      try {
+        const res = await fetch(`/api/agents/${agentId}/chat/messages?after=${afterId}`);
+        if (res.ok) {
+          const data = await res.json();
+          const newMsgs = data.messages ?? [];
+          if (newMsgs.length > 0) {
+            setMessages((prev) => [...prev, ...newMsgs]);
+            lastMessageIdRef.current = newMsgs[newMsgs.length - 1].id;
+            // Check if we got an agent response — stop waiting
+            const hasAgentResponse = newMsgs.some((m: { role: string }) => m.role === "agent");
+            if (hasAgentResponse) {
+              setIsWaitingForResponse(false);
+              stopPolling();
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }, 2000);
+  }, [agentId]);
+
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => stopPolling();
+  }, [stopPolling]);
 
   // Clear chat mutation (still uses tRPC)
   const clearChat = trpc.messages.clear.useMutation({
     onSuccess: () => {
-      refetchMessages();
-      setLastPollTime(undefined);
+      setMessages([]);
+      lastMessageIdRef.current = null;
+      setIsWaitingForResponse(false);
+      stopPolling();
     },
   });
-
-  const messages = messageData?.messages ?? [];
-
-  // Update last poll time when messages load
-  useEffect(() => {
-    if (messages.length > 0) {
-      const lastMsg = messages[messages.length - 1];
-      if (lastMsg) {
-        setLastPollTime(new Date(lastMsg.createdAt).toISOString());
-      }
-    }
-  }, [messages]);
-
-  // Refetch when new messages arrive from polling
-  useEffect(() => {
-    if (newMessages && newMessages.length > 0) {
-      refetchMessages();
-      const lastMsg = newMessages[newMessages.length - 1];
-      if (lastMsg) {
-        setLastPollTime(new Date(lastMsg.createdAt).toISOString());
-      }
-    }
-  }, [newMessages, refetchMessages]);
 
   // Auto-scroll to bottom only if user is near bottom
   useEffect(() => {
     if (shouldAutoScroll) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, shouldAutoScroll]);
+  }, [messages, shouldAutoScroll, isWaitingForResponse]);
 
   // Track scroll position to decide auto-scroll
   const handleScroll = useCallback(() => {
@@ -160,7 +187,7 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
     setShouldAutoScroll(nearBottom);
   }, []);
 
-  // Chat V2: Send message via direct HTTP to agent gateway
+  // Send message — stores as pending, daemon will relay
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || isSending) return;
@@ -181,15 +208,30 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
         throw new Error(data.error || `Request failed: ${response.status}`);
       }
 
+      const { messageId } = await response.json();
+
+      // Optimistically add the user message to the list
+      const optimisticMsg = {
+        id: messageId,
+        agentId,
+        role: "user",
+        content: trimmed,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, optimisticMsg]);
+      lastMessageIdRef.current = messageId;
+
       setInput("");
-      await refetchMessages();
+      setIsWaitingForResponse(true);
+      startPolling();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to send message";
       setSendError(message);
     } finally {
       setIsSending(false);
     }
-  }, [input, isSending, agentId, refetchMessages]);
+  }, [input, isSending, agentId, startPolling]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -257,21 +299,6 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto px-6 py-4 space-y-4"
       >
-        {/* Load older messages button */}
-        {messageData?.hasMore && (
-          <div className="flex justify-center pb-2">
-            <button
-              onClick={() => {
-                // Load older messages — for now, increase limit
-                // TODO: implement proper cursor loading
-              }}
-              className="text-xs text-primary hover:text-primary/80 transition-colors"
-            >
-              Load older messages
-            </button>
-          </div>
-        )}
-
         {isLoadingMessages ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -352,13 +379,15 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
                         <span>
                           {msg.status === "pending"
                             ? "⏳ Pending"
-                            : msg.status === "delivered"
-                              ? "✓ Delivered"
-                              : msg.status === "responded"
-                                ? "✓✓"
-                                : msg.status === "failed"
-                                  ? "✕ Failed"
-                                  : ""}
+                            : msg.status === "processing"
+                              ? "⏳ Processing"
+                              : msg.status === "delivered"
+                                ? "✓ Delivered"
+                                : msg.status === "responded"
+                                  ? "✓✓"
+                                  : msg.status === "failed"
+                                    ? "✕ Failed"
+                                    : ""}
                         </span>
                       )}
                     </div>
@@ -371,6 +400,20 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
                 </div>
               );
             })}
+            {isWaitingForResponse && (
+              <div className="flex gap-3 justify-start">
+                <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 mt-1">
+                  <Bot className="w-4 h-4 text-primary" />
+                </div>
+                <div className="bg-muted text-foreground rounded-2xl rounded-bl-md px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <div className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <div className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                </div>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </>
         )}

@@ -1520,6 +1520,167 @@ if (args.includes("--verify")) {
 } else {
   void startDaemon();
 }
+// =============================================================================
+// Chat Relay — long-poll pending messages and forward to containers
+// =============================================================================
+
+function httpRequest(url, options) {
+  return new Promise((resolve, reject) => {
+    const parsed = new import_node_url2.URL(url);
+    const transport = parsed.protocol === "https:" ? https2 : http2;
+    const req = transport.request(url, options, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => {
+        resolve({
+          statusCode: res.statusCode ?? 0,
+          headers: res.headers,
+          body: Buffer.concat(chunks).toString("utf-8")
+        });
+      });
+    });
+    req.on("error", reject);
+    if (options.timeout) {
+      req.setTimeout(options.timeout, () => {
+        req.destroy(new Error(`Request timeout (${options.timeout}ms)`));
+      });
+    }
+    if (options.body) {
+      req.write(options.body);
+    }
+    req.end();
+  });
+}
+
+var chatRelayRunning = false;
+
+async function chatRelayLoop(config) {
+  chatRelayRunning = true;
+  const pendingUrl = `${config.apiUrl}/api/agents/chat/pending`;
+
+  while (chatRelayRunning) {
+    try {
+      // Long-poll for pending messages (30s timeout to cover 25s server hold)
+      const res = await httpRequest(pendingUrl, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`
+        },
+        timeout: 35000
+      });
+
+      if (res.statusCode === 401 || res.statusCode === 403) {
+        log("ERROR", `[ChatRelay] Auth failed (${res.statusCode}). Stopping.`);
+        chatRelayRunning = false;
+        return;
+      }
+
+      if (res.statusCode !== 200) {
+        log("WARN", `[ChatRelay] Unexpected status ${res.statusCode}, retrying in 2s`);
+        await sleep3(2000);
+        continue;
+      }
+
+      const data = JSON.parse(res.body);
+      const messages = data.messages || [];
+
+      if (messages.length === 0) {
+        // No pending messages — loop immediately for next long-poll
+        continue;
+      }
+
+      log("INFO", `[ChatRelay] Got ${messages.length} pending message(s)`);
+
+      // Process each message concurrently
+      await Promise.all(messages.map((msg) => relayMessage(config, msg)));
+
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg.includes("timeout")) {
+        // Normal long-poll timeout — just retry
+        continue;
+      }
+      log("WARN", `[ChatRelay] Error: ${errMsg}, retrying in 2s`);
+      await sleep3(2000);
+    }
+  }
+}
+
+async function relayMessage(config, msg) {
+  const { messageId, agentId, content, containerPort, gatewayToken } = msg;
+  const respondUrl = `${config.apiUrl}/api/agents/${agentId}/chat/respond`;
+
+  if (!containerPort || !gatewayToken) {
+    log("WARN", `[ChatRelay] Missing port/token for agent ${agentId}, failing message`);
+    await postRespond(respondUrl, config.apiKey, { messageId, status: "failed", error: "Missing container port or gateway token" });
+    return;
+  }
+
+  try {
+    const containerUrl = `http://127.0.0.1:${containerPort}/v1/chat/completions`;
+    log("INFO", `[ChatRelay] Forwarding to container at :${containerPort} for agent ${agentId}`);
+
+    const body = JSON.stringify({
+      messages: [{ role: "user", content }],
+      stream: false
+    });
+
+    const res = await httpRequest(containerUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+        Authorization: `Bearer ${gatewayToken}`
+      },
+      timeout: 120000,
+      body
+    });
+
+    if (res.statusCode !== 200) {
+      log("WARN", `[ChatRelay] Container returned ${res.statusCode} for agent ${agentId}`);
+      await postRespond(respondUrl, config.apiKey, { messageId, status: "failed", error: `Container error: ${res.statusCode}` });
+      return;
+    }
+
+    const data = JSON.parse(res.body);
+    const assistantContent =
+      data.choices?.[0]?.message?.content ||
+      data.choices?.[0]?.delta?.content ||
+      "[No response from agent]";
+
+    log("INFO", `[ChatRelay] Agent ${agentId} responded (${assistantContent.length} chars)`);
+    await postRespond(respondUrl, config.apiKey, { messageId, content: assistantContent, status: "responded" });
+
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    log("ERROR", `[ChatRelay] Failed to relay to agent ${agentId}: ${errMsg}`);
+    await postRespond(respondUrl, config.apiKey, { messageId, status: "failed", error: errMsg });
+  }
+}
+
+async function postRespond(url, apiKey, body) {
+  try {
+    const bodyStr = JSON.stringify(body);
+    await httpRequest(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(bodyStr)
+      },
+      timeout: 10000,
+      body: bodyStr
+    });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    log("ERROR", `[ChatRelay] Failed to post response: ${errMsg}`);
+  }
+}
+
+function stopChatRelay() {
+  chatRelayRunning = false;
+}
+
 async function startDaemon() {
   log("INFO", `Sparebox Daemon v${VERSION} starting`);
   const config = loadConfig();
@@ -1544,6 +1705,7 @@ async function startDaemon() {
     shuttingDown = true;
     log("INFO", `Received ${signal} \u2014 shutting down gracefully`);
     stopHeartbeatLoop();
+    stopChatRelay();
     try {
       await shutdownAllAgents();
     } catch (err) {
@@ -1559,4 +1721,9 @@ async function startDaemon() {
   process.on("SIGINT", () => void shutdown("SIGINT"));
   log("INFO", "Starting heartbeat loop...");
   startHeartbeatLoop(config, VERSION);
+  log("INFO", "Starting chat relay loop...");
+  chatRelayLoop(config).catch((err) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    log("ERROR", `Chat relay loop crashed: ${msg}`);
+  });
 }
