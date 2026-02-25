@@ -123,9 +123,17 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
   }, [fetchMessages]);
 
   // Poll for new messages after the last known message
+  const pollStartRef = useRef<number>(0);
   const startPolling = useCallback(() => {
     if (pollTimerRef.current) return;
+    pollStartRef.current = Date.now();
     pollTimerRef.current = setInterval(async () => {
+      // Safety: stop polling after 2 minutes
+      if (Date.now() - pollStartRef.current > 120_000) {
+        setIsWaitingForResponse(false);
+        stopPolling();
+        return;
+      }
       const afterId = lastMessageIdRef.current;
       if (!afterId) return;
       try {
@@ -134,9 +142,13 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
           const data = await res.json();
           const newMsgs = data.messages ?? [];
           if (newMsgs.length > 0) {
-            setMessages((prev) => [...prev, ...newMsgs]);
+            setMessages((prev) => {
+              const existingIds = new Set(prev.map((m) => m.id));
+              const deduped = newMsgs.filter((m: { id: string }) => !existingIds.has(m.id));
+              return deduped.length > 0 ? [...prev, ...deduped] : prev;
+            });
             lastMessageIdRef.current = newMsgs[newMsgs.length - 1].id;
-            // Check if we got an agent response — stop waiting
+            // Check if we got an agent response (success or failure) — stop waiting
             const hasAgentResponse = newMsgs.some((m: { role: string }) => m.role === "agent");
             if (hasAgentResponse) {
               setIsWaitingForResponse(false);

@@ -6,6 +6,9 @@ import { eq, and, isNull, inArray } from "drizzle-orm";
 import { decrypt } from "@/lib/encryption";
 import { API_KEY_PREFIX } from "@/lib/constants";
 
+// Vercel Hobby: default 10s, max 60s. Set to 30s for long-poll.
+export const maxDuration = 30;
+
 function sha256(input: string): string {
   return createHash("sha256").update(input).digest("hex");
 }

@@ -91,10 +91,20 @@ export async function POST(
   }
 
   if (status === "failed") {
+    // Update user message status
     await db
       .update(agentMessages)
       .set({ status: "failed" })
       .where(eq(agentMessages.id, messageId));
+
+    // Insert a failure message so the UI can detect it and stop polling
+    await db.insert(agentMessages).values({
+      agentId,
+      role: "agent",
+      content: errorMsg || "Failed to get a response from the agent. Please try again.",
+      status: "failed",
+      respondedAt: new Date(),
+    });
 
     return NextResponse.json({ ok: true });
   }
