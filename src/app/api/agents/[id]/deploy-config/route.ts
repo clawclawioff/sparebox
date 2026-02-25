@@ -93,9 +93,13 @@ export async function GET(
     }
   }
 
-  // Set model from config if provided
+  // Set model from config if provided, or default based on provider
   if (agentConfig.model && typeof agentConfig.model === "string") {
     env.OPENCLAW_MODEL = agentConfig.model;
+  } else if (env.OPENCLAW_PROVIDER === "openai") {
+    env.OPENCLAW_MODEL = "openai/gpt-4o";
+  } else if (env.OPENCLAW_PROVIDER === "anthropic") {
+    env.OPENCLAW_MODEL = "anthropic/claude-sonnet-4-20250514";
   }
 
   // Set agent name
