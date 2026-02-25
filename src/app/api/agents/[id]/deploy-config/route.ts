@@ -135,6 +135,11 @@ export async function GET(
   const openclawConfig = {
     // Gateway config with HTTP API enabled
     gateway: {
+      // Port 3000 matches Docker's internal port mapping ({hostPort}:3000)
+      port: 3000,
+      // Bind to 0.0.0.0 so Docker can forward traffic into the container
+      // (default "loopback" only binds 127.0.0.1, unreachable from host)
+      bind: "lan",
       auth: {
         mode: "token" as const,
         token: gatewayToken,
