@@ -637,8 +637,15 @@ async function handleDeploy(cmd) {
           }
         }
       }
+      // Chat V2: Write openclaw.json with HTTP API enabled for direct chat
       if (configData.openclawConfig && typeof configData.openclawConfig === "object") {
-        fs2.writeFileSync(path2.join(stateDir, "openclaw-config.json"), JSON.stringify(configData.openclawConfig, null, 2), "utf-8");
+        // The deploy-config now includes gateway auth and HTTP endpoint config
+        fs2.writeFileSync(
+          path2.join(stateDir, "openclaw.json"),
+          JSON.stringify(configData.openclawConfig, null, 2),
+          "utf-8"
+        );
+        log("INFO", `Wrote openclaw.json with HTTP API enabled for ${agentId}`);
       }
       fs2.writeFileSync(path2.join(stateDir, "deploy-config.json"), JSON.stringify(configData, null, 2), "utf-8");
       log("INFO", `Deploy config applied for ${agentId}: ${Object.keys(agentEnv).join(", ") || "no env vars"}`);
@@ -1285,7 +1292,7 @@ async function sendHeartbeat(config, daemonVersion) {
   ]);
   const ramUsage = getRamUsage();
   const commandAcks = drainAcks();
-  const messageResponses = drainMessageResponses();
+  // Note: messageResponses removed in Chat V2 - messaging now uses direct HTTP
   const payload = {
     cpuUsage,
     ramUsage,
@@ -1302,8 +1309,8 @@ async function sendHeartbeat(config, daemonVersion) {
     cpuModel: getCpuModel(),
     isolationMode: getIsolationMode(),
     openclawVersion,
-    commandAcks,
-    messageResponses
+    commandAcks
+    // messageResponses removed - Chat V2 uses direct HTTP
   };
   const url = `${config.apiUrl}/api/hosts/heartbeat`;
   const body = JSON.stringify(payload);
@@ -1317,8 +1324,7 @@ async function sendHeartbeat(config, daemonVersion) {
       resetBackoff();
       const data = JSON.parse(res.body);
       const ackInfo = commandAcks.length > 0 ? `, sent ${commandAcks.length} ack(s)` : "";
-      const msgInfo = messageResponses.length > 0 ? `, sent ${messageResponses.length} msg response(s)` : "";
-      log("INFO", `Heartbeat sent (CPU: ${cpuUsage}%, RAM: ${ramUsage}%, Disk: ${diskUsage === -1 ? "N/A" : diskUsage + "%"}, agents: ${getAgentCount()}${ackInfo}${msgInfo})`);
+      log("INFO", `Heartbeat sent (CPU: ${cpuUsage}%, RAM: ${ramUsage}%, Disk: ${diskUsage === -1 ? "N/A" : diskUsage + "%"}, agents: ${getAgentCount()}${ackInfo})`);
       if (data.commands && data.commands.length > 0) {
         log("INFO", `Received ${data.commands.length} command(s) from platform`);
         processCommands(data.commands).then((acks) => {
@@ -1331,14 +1337,7 @@ async function sendHeartbeat(config, daemonVersion) {
           log("ERROR", `Command processing failed: ${msg}`);
         });
       }
-      if (data.messages && data.messages.length > 0) {
-        log("INFO", `Received ${data.messages.length} message(s) from platform`);
-        const agentRecords = getAgentRecordsForMessaging();
-        processMessages(data.messages, agentRecords).catch((err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          log("ERROR", `Message processing failed: ${msg}`);
-        });
-      }
+      // Note: message handling removed in Chat V2 - messaging now uses direct HTTP
       return data;
     }
     if (res.statusCode === 401 || res.statusCode === 403) {
@@ -1346,8 +1345,6 @@ async function sendHeartbeat(config, daemonVersion) {
       log("ERROR", "Heartbeats stopped \u2014 fix your API key and restart the daemon.");
       if (commandAcks.length > 0)
         queueAcks(commandAcks);
-      if (messageResponses.length > 0)
-        queueMessageResponses(messageResponses);
       return null;
     }
     if (res.statusCode === 429) {
@@ -1356,39 +1353,31 @@ async function sendHeartbeat(config, daemonVersion) {
       log("WARN", `Rate limited (429). Retrying in ${Math.round(waitMs / 1e3)}s`);
       if (commandAcks.length > 0)
         queueAcks(commandAcks);
-      if (messageResponses.length > 0)
-        queueMessageResponses(messageResponses);
       await sleep3(waitMs);
-      return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: waitMs };
+      return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: waitMs };
     }
     if (res.statusCode >= 500) {
       const wait2 = nextBackoff();
       log("WARN", `Server error (${res.statusCode}). Retrying in ${Math.round(wait2 / 1e3)}s`);
       if (commandAcks.length > 0)
         queueAcks(commandAcks);
-      if (messageResponses.length > 0)
-        queueMessageResponses(messageResponses);
       await sleep3(wait2);
-      return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: wait2 };
+      return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: wait2 };
     }
     log("WARN", `Unexpected response: ${res.statusCode} \u2014 ${res.body.slice(0, 200)}`);
     if (commandAcks.length > 0)
       queueAcks(commandAcks);
-    if (messageResponses.length > 0)
-      queueMessageResponses(messageResponses);
     const wait = nextBackoff();
     await sleep3(wait);
-    return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: wait };
+    return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: wait };
   } catch (err) {
     const wait = nextBackoff();
     const msg = err instanceof Error ? err.message : String(err);
     log("WARN", `Heartbeat failed: ${msg} \u2014 retrying in ${Math.round(wait / 1e3)}s (attempt ${consecutiveFailures})`);
     if (commandAcks.length > 0)
       queueAcks(commandAcks);
-    if (messageResponses.length > 0)
-      queueMessageResponses(messageResponses);
     await sleep3(wait);
-    return { ok: false, ts: Date.now(), commands: [], messages: [], nextHeartbeatMs: wait };
+    return { ok: false, ts: Date.now(), commands: [], nextHeartbeatMs: wait };
   }
 }
 var running = false;

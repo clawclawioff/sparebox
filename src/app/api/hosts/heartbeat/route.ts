@@ -74,16 +74,7 @@ const heartbeatSchema = z.object({
       })
     )
     .default([]),
-  // Message responses from agent (chat replies)
-  messageResponses: z
-    .array(
-      z.object({
-        messageId: z.string().uuid(), // the user message being replied to
-        agentId: z.string().uuid(),
-        content: z.string().max(50000),
-      })
-    )
-    .default([]),
+  // Note: messageResponses removed in Chat V2 - messaging now uses direct HTTP
 });
 
 // =============================================================================
@@ -348,37 +339,25 @@ export async function POST(req: NextRequest) {
     // Non-critical — don't fail the heartbeat
   }
 
-  // 9b. Process message responses from daemon (agent chat replies)
-  if (data.messageResponses.length > 0) {
-    for (const resp of data.messageResponses) {
-      try {
-        // Verify the agent belongs to this host
-        const agent = await db.query.agents.findFirst({
-          where: and(eq(agents.id, resp.agentId), eq(agents.hostId, keyRecord.hostId)),
-          columns: { id: true },
-        });
+  // 9b. [REMOVED in Chat V2] Message responses now handled via direct HTTP
 
-        if (!agent) {
-          console.error(`[Heartbeat] Message response for unknown agent ${resp.agentId}`);
-          continue;
+  // 9c. Store container ports from agent statuses (Chat V2)
+  if (data.agentStatuses?.length > 0) {
+    for (const status of data.agentStatuses) {
+      if (status.port && status.agentId) {
+        try {
+          await db
+            .update(agents)
+            .set({ containerPort: status.port })
+            .where(
+              and(
+                eq(agents.id, status.agentId),
+                eq(agents.hostId, keyRecord.hostId)
+              )
+            );
+        } catch (err) {
+          console.error(`[Heartbeat] Failed to update container port for agent ${status.agentId}:`, err);
         }
-
-        // Mark the original user message as responded
-        await db
-          .update(agentMessages)
-          .set({ status: "responded", respondedAt: new Date() })
-          .where(eq(agentMessages.id, resp.messageId));
-
-        // Insert the agent's reply
-        await db.insert(agentMessages).values({
-          agentId: resp.agentId,
-          role: "agent",
-          content: resp.content,
-          status: "responded",
-          respondedAt: new Date(),
-        });
-      } catch (err) {
-        console.error(`[Heartbeat] Failed to process message response:`, err);
       }
     }
   }
@@ -420,54 +399,7 @@ export async function POST(req: NextRequest) {
     console.error("[Heartbeat] Failed to fetch pending commands:", err);
   }
 
-  // 10b. Fetch pending messages for agents on this host
-  let pendingMessages: Array<{
-    id: string;
-    agentId: string;
-    content: string;
-  }> = [];
-
-  try {
-    // Get all agent IDs on this host
-    const hostAgents = await db.query.agents.findMany({
-      where: and(
-        eq(agents.hostId, keyRecord.hostId),
-        inArray(agents.status, ["running", "deploying"])
-      ),
-      columns: { id: true },
-    });
-
-    if (hostAgents.length > 0) {
-      const agentIds = hostAgents.map((a) => a.id);
-
-      const msgs = await db.query.agentMessages.findMany({
-        where: and(
-          inArray(agentMessages.agentId, agentIds),
-          eq(agentMessages.role, "user"),
-          eq(agentMessages.status, "pending")
-        ),
-        orderBy: (m, { asc }) => [asc(m.createdAt)],
-        limit: 20,
-      });
-
-      if (msgs.length > 0) {
-        pendingMessages = msgs.map((m) => ({
-          id: m.id,
-          agentId: m.agentId,
-          content: m.content,
-        }));
-
-        // Mark as delivered
-        const msgIds = msgs.map((m) => m.id);
-        await db
-          .update(agentMessages)
-          .set({ status: "delivered", deliveredAt: new Date() })
-          .where(inArray(agentMessages.id, msgIds));
-      }
-    }
-  } catch (err) {
-    console.error("[Heartbeat] Failed to fetch pending messages:", err);
-  }
+  // 10b. [REMOVED in Chat V2] Pending messages now handled via direct HTTP
 
   // 11. Update key last_used_at
   await db
@@ -476,11 +408,11 @@ export async function POST(req: NextRequest) {
     .where(eq(hostApiKeys.id, keyRecord.id));
 
   // 12. Return response
+  // Note: messages field removed in Chat V2 - messaging now uses direct HTTP
   return NextResponse.json({
     ok: true,
     ts: Date.now(),
     commands: pendingCommands,
-    messages: pendingMessages,
     nextHeartbeatMs: HEARTBEAT_INTERVAL_MS,
   });
 }

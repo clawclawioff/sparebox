@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHash } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { db } from "@/db";
 import { agents, hostApiKeys } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
-import { decrypt } from "@/lib/encryption";
+import { decrypt, encrypt } from "@/lib/encryption";
 import { API_KEY_PREFIX, TIERS, type TierKey } from "@/lib/constants";
 
 // =============================================================================
@@ -105,6 +105,57 @@ export async function GET(
   // Set agent name
   env.OPENCLAW_AGENT_NAME = agent.name;
 
+  // 5. Generate gateway token for direct HTTP chat (Chat V2)
+  //    If agent doesn't have one, generate and store it
+  let gatewayToken: string;
+  if (agent.gatewayToken) {
+    try {
+      gatewayToken = decrypt(agent.gatewayToken);
+    } catch (err) {
+      console.error(`[deploy-config] Failed to decrypt gateway token for agent ${agentId}, generating new one:`, err);
+      gatewayToken = randomBytes(32).toString("hex");
+      await db.update(agents).set({ gatewayToken: encrypt(gatewayToken) }).where(eq(agents.id, agentId));
+    }
+  } else {
+    // Generate new gateway token
+    gatewayToken = randomBytes(32).toString("hex");
+    await db.update(agents).set({ gatewayToken: encrypt(gatewayToken) }).where(eq(agents.id, agentId));
+    console.log(`[deploy-config] Generated gateway token for agent ${agentId}`);
+  }
+
+  // 6. Determine model for OpenClaw config
+  const modelPrimary = env.OPENCLAW_MODEL || 
+    (env.OPENCLAW_PROVIDER === "openai" ? "openai/gpt-4o-mini" : "anthropic/claude-sonnet-4-6");
+
+  // 7. Build OpenClaw config with HTTP API enabled
+  //    This config will be written to /state/openclaw.json in the container
+  const openclawConfig = {
+    // Merge any existing agent config
+    ...agentConfig,
+    // Gateway config with HTTP API enabled
+    gateway: {
+      auth: {
+        mode: "token",
+        token: gatewayToken,
+      },
+      http: {
+        endpoints: {
+          chatCompletions: {
+            enabled: true,
+          },
+        },
+      },
+    },
+    // Agent defaults
+    agents: {
+      defaults: {
+        model: {
+          primary: modelPrimary,
+        },
+      },
+    },
+  };
+
   const configBundle = {
     agentId: agent.id,
     agentName: agent.name,
@@ -116,10 +167,10 @@ export async function GET(
     },
     // Environment variables — daemon MUST pass these to the container/profile
     env,
-    // OpenClaw configuration overrides (daemon writes to config file)
-    openclawConfig: {
-      ...agentConfig,
-    },
+    // OpenClaw configuration (daemon writes to /state/openclaw.json)
+    openclawConfig,
+    // Gateway token (also in openclawConfig, but explicit for daemon)
+    gatewayToken,
     // Workspace files to create in the agent's workspace
     workspaceFiles,
     // LLM API key (kept for backwards compat, but `env` is authoritative)

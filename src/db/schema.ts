@@ -171,6 +171,9 @@ export const agents = pgTable("agents", {
   containerId: text("container_id"),
   isolationMode: text("isolation_mode").default("docker"),
   openclawVersion: text("openclaw_version").default("latest"),
+  // Chat V2: Direct HTTP to container gateway
+  gatewayToken: text("gateway_token"), // Encrypted token for container's HTTP API
+  containerPort: integer("container_port"), // Host port mapped to container's 3000
   lastActive: timestamp("last_active"),
   totalUptime: integer("total_uptime").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),

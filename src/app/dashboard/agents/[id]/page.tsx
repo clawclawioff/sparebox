@@ -88,6 +88,7 @@ function TierBadge({ tier }: { tier: string | null | undefined }) {
 function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: string }) {
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -104,29 +105,16 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
     { enabled: !!agentId }
   );
 
-  // Poll for new messages every 3 seconds
+  // Poll for new messages every 3 seconds (for any updates)
   const { data: newMessages } = trpc.messages.poll.useQuery(
     { agentId, since: lastPollTime },
     {
-      enabled: !!agentId && !!lastPollTime,
-      refetchInterval: 3000,
+      enabled: !!agentId && !!lastPollTime && !isSending,
+      refetchInterval: 5000, // Slower polling since Chat V2 is instant
     }
   );
 
-  // Send message mutation
-  const sendMessage = trpc.messages.send.useMutation({
-    onSuccess: () => {
-      setInput("");
-      setIsSending(false);
-      setShouldAutoScroll(true);
-      refetchMessages();
-    },
-    onError: () => {
-      setIsSending(false);
-    },
-  });
-
-  // Clear chat mutation
+  // Clear chat mutation (still uses tRPC)
   const clearChat = trpc.messages.clear.useMutation({
     onSuccess: () => {
       refetchMessages();
@@ -172,18 +160,41 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
     setShouldAutoScroll(nearBottom);
   }, []);
 
-  const handleSend = useCallback(() => {
+  // Chat V2: Send message via direct HTTP to agent gateway
+  const handleSend = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed || isSending) return;
 
     setIsSending(true);
-    sendMessage.mutate({ agentId, content: trimmed });
-  }, [input, isSending, agentId, sendMessage]);
+    setSendError(null);
+    setShouldAutoScroll(true);
+
+    try {
+      const response = await fetch(`/api/agents/${agentId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: trimmed }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(data.error || `Request failed: ${response.status}`);
+      }
+
+      setInput("");
+      await refetchMessages();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to send message";
+      setSendError(message);
+    } finally {
+      setIsSending(false);
+    }
+  }, [input, isSending, agentId, refetchMessages]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      void handleSend();
     }
   }, [handleSend]);
 
@@ -236,11 +247,6 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
               }`}
             />
             {isAgentOnline ? "Online" : "Offline"}
-            {isAgentOnline && (
-              <span className="text-muted-foreground/60">
-                · Responses may take up to 60s
-              </span>
-            )}
           </div>
         </div>
       </div>
@@ -278,7 +284,7 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
             <p className="text-foreground font-medium">Start a conversation</p>
             <p className="text-sm text-muted-foreground mt-1 max-w-sm">
               Send a message to interact with your deployed OpenClaw agent.
-              Messages are delivered via the host daemon.
+              Responses are delivered instantly.
             </p>
           </div>
         ) : (
@@ -401,7 +407,7 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
               }}
             />
             <button
-              onClick={handleSend}
+              onClick={() => void handleSend()}
               disabled={!input.trim() || isSending}
               className="w-11 h-11 bg-primary hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground text-primary-foreground rounded-xl flex items-center justify-center transition-colors shrink-0"
             >
@@ -413,9 +419,9 @@ function AgentChat({ agentId, agentStatus }: { agentId: string; agentStatus: str
             </button>
           </div>
         )}
-        {sendMessage.error && (
+        {sendError && (
           <p className="text-xs text-destructive mt-2">
-            {sendMessage.error.message}
+            {sendError}
           </p>
         )}
       </div>
