@@ -97,9 +97,9 @@ export async function GET(
   if (agentConfig.model && typeof agentConfig.model === "string") {
     env.OPENCLAW_MODEL = agentConfig.model;
   } else if (env.OPENCLAW_PROVIDER === "openai") {
-    env.OPENCLAW_MODEL = "openai/gpt-4o";
+    env.OPENCLAW_MODEL = "openai/gpt-5-mini";
   } else if (env.OPENCLAW_PROVIDER === "anthropic") {
-    env.OPENCLAW_MODEL = "anthropic/claude-sonnet-4-20250514";
+    env.OPENCLAW_MODEL = "anthropic/claude-sonnet-4-6";
   }
 
   // Set agent name
@@ -125,17 +125,18 @@ export async function GET(
 
   // 6. Determine model for OpenClaw config
   const modelPrimary = env.OPENCLAW_MODEL || 
-    (env.OPENCLAW_PROVIDER === "openai" ? "openai/gpt-4o-mini" : "anthropic/claude-sonnet-4-6");
+    (env.OPENCLAW_PROVIDER === "openai" ? "openai/gpt-5-mini" : "anthropic/claude-sonnet-4-6");
 
   // 7. Build OpenClaw config with HTTP API enabled
   //    This config will be written to /state/openclaw.json in the container
+  //    IMPORTANT: Only include valid OpenClaw config keys.
+  //    agentConfig contains Sparebox-internal fields (provider, model, etc.)
+  //    that are NOT valid OpenClaw config keys — do NOT spread them here.
   const openclawConfig = {
-    // Merge any existing agent config
-    ...agentConfig,
     // Gateway config with HTTP API enabled
     gateway: {
       auth: {
-        mode: "token",
+        mode: "token" as const,
         token: gatewayToken,
       },
       http: {
