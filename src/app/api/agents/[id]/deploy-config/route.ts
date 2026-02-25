@@ -152,6 +152,10 @@ export async function GET(
         },
       },
     },
+    // Cron — webhook token for proactive delivery back to Sparebox
+    cron: {
+      webhookToken: gatewayToken,
+    },
     // Agent defaults
     agents: {
       defaults: {
@@ -161,6 +165,50 @@ export async function GET(
       },
     },
   };
+
+  // 8. Build default workspace files (merged with user-provided ones)
+  const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://www.sparebox.dev"}/api/agents/${agentId}/chat/webhook`;
+  const defaultWorkspaceFiles: Record<string, string> = {
+    "AGENTS.md": `# Agent Environment — Sparebox
+
+You are running inside a Sparebox container. Some features work differently here.
+
+## Cron Jobs / Scheduled Tasks
+
+This environment has **no messaging channels** (no Telegram, Discord, etc.).
+When creating cron jobs, you MUST use one of these approaches:
+
+### Option 1: Webhook delivery (recommended for proactive notifications)
+Use \`delivery.mode = "webhook"\` with the Sparebox webhook URL:
+- Webhook URL: ${webhookUrl}
+- Auth: Use the gateway token as Bearer token
+
+Example cron job:
+\`\`\`json
+{
+  "sessionTarget": "isolated",
+  "payload": { "kind": "agentTurn", "message": "Generate daily summary" },
+  "delivery": { "mode": "webhook", "to": "${webhookUrl}" }
+}
+\`\`\`
+
+### Option 2: Main session system events (for reminders to yourself)
+Use \`sessionTarget: "main"\` with \`payload.kind: "systemEvent"\`.
+The user will see the result when they next send a chat message.
+
+### What NOT to do
+- Do NOT use \`delivery.mode: "announce"\` — there are no channels to announce to.
+- Do NOT try to pair or connect messaging channels.
+
+## Environment
+- Agent ID: ${agentId}
+- Agent Name: ${agent.name}
+- Webhook URL: ${webhookUrl}
+`,
+  };
+
+  // Merge: user files take precedence over defaults
+  const mergedWorkspaceFiles = { ...defaultWorkspaceFiles, ...workspaceFiles };
 
   const configBundle = {
     agentId: agent.id,
@@ -178,7 +226,7 @@ export async function GET(
     // Gateway token (also in openclawConfig, but explicit for daemon)
     gatewayToken,
     // Workspace files to create in the agent's workspace
-    workspaceFiles,
+    workspaceFiles: mergedWorkspaceFiles,
     // LLM API key (kept for backwards compat, but `env` is authoritative)
     apiKey: apiKeyPlaintext,
     // Metadata
