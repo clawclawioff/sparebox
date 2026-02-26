@@ -163,6 +163,16 @@ export async function GET(
     cron: {
       webhookToken: gatewayToken,
     },
+    // Web search — platform-provided Brave Search API key
+    ...(process.env.BRAVE_SEARCH_API_KEY ? {
+      tools: {
+        web: {
+          search: {
+            apiKey: process.env.BRAVE_SEARCH_API_KEY,
+          },
+        },
+      },
+    } : {}),
     // Agent defaults
     agents: {
       defaults: {
@@ -181,6 +191,28 @@ export async function GET(
     "AGENTS.md": `# Agent Environment — Sparebox
 
 You are running inside a Sparebox container. Some features work differently here.
+
+## Tool Availability
+
+### ✅ Works normally
+- **Read/Write/Edit** — Files at /workspace (your workspace directory)
+- **web_fetch** — Fetch and extract content from URLs
+- **cron** — Schedule jobs (see Cron section below)
+- **gateway** — Config management
+- **exec** — Shell commands (limited, see below)
+
+### ⚠️ Limited
+- **exec/shell** — Read-only filesystem. You CANNOT install packages, use sudo, or write outside /workspace and /tmp. Basic shell commands, scripts, and file operations work fine.
+- **web_search** — Only available if the deployer's plan includes it.
+- **image** — Vision/image analysis works if your LLM model supports it (GPT-5-mini and Claude Sonnet do).
+- **sessions_spawn/subagents** — Works but shares the container's resource limits.
+
+### ❌ Not available
+- **browser** — No browser installed in the container. Cannot browse, screenshot, or automate web pages.
+- **tts** — No text-to-speech service configured.
+- **message** — No messaging channels (Telegram, Discord, etc.). Use the chat interface or webhook delivery instead.
+- **nodes** — No paired devices.
+- **canvas** — HTML canvas can be generated but there's no browser to view it.
 
 ## Cron Jobs / Scheduled Tasks
 
@@ -208,6 +240,12 @@ The user will see the result when they next send a chat message.
 ### What NOT to do
 - Do NOT use \`delivery.mode: "announce"\` — there are no channels to announce to.
 - Do NOT try to pair or connect messaging channels.
+
+## File System
+- **Workspace:** /workspace (persistent, read-write)
+- **Temp files:** /tmp (tmpfs, cleared on restart, 256MB limit)
+- **Agent state:** /home/node/.openclaw (tmpfs, 128MB limit)
+- **Everything else:** Read-only. Do not attempt to write outside these directories.
 
 ## Environment
 - Agent ID: ${agentId}
