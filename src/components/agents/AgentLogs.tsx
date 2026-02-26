@@ -44,20 +44,18 @@ export function AgentLogs({ agentId }: { agentId: string }) {
     }
   }, [initialData]);
 
-  // Live poll — use setInterval + manual fetch approach to avoid tRPC query option issues
+  // Live poll via tRPC
+  const utils = trpc.useUtils();
   useEffect(() => {
     if (!isLive) return;
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/trpc/logs.poll?input=${encodeURIComponent(JSON.stringify({ agentId, since: lastPollTime }))}`);
-        if (!res.ok) return;
-        const json = await res.json();
-        const newLogs: LogEntry[] = json.result?.data ?? [];
+        const newLogs = await utils.logs.poll.fetch({ agentId, since: lastPollTime });
         if (newLogs.length > 0) {
           setDisplayLogs((prev) => {
             const existingIds = new Set(prev.map((l) => l.id));
-            const deduped = newLogs.filter((l) => !existingIds.has(l.id));
+            const deduped = newLogs.filter((l: LogEntry) => !existingIds.has(l.id));
             if (deduped.length === 0) return prev;
             return [...prev, ...deduped];
           });
@@ -70,7 +68,7 @@ export function AgentLogs({ agentId }: { agentId: string }) {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [isLive, agentId, lastPollTime]);
+  }, [isLive, agentId, lastPollTime, utils]);
 
   const hasMore = initialData?.hasMore ?? false;
 
