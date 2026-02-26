@@ -165,6 +165,12 @@ export async function GET(
       // Bind to 0.0.0.0 so Docker can forward traffic into the container
       // (default "loopback" only binds 127.0.0.1, unreachable from host)
       bind: "lan",
+      // Disable Control UI — container agents use HTTP API only.
+      // Without this, non-loopback bind requires allowedOrigins config
+      // and the gateway refuses to start.
+      controlUi: {
+        enabled: false,
+      },
       auth: {
         mode: "token" as const,
         token: gatewayToken,
