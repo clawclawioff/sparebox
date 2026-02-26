@@ -174,6 +174,7 @@ export const agents = pgTable("agents", {
   // Chat V2: Direct HTTP to container gateway
   gatewayToken: text("gateway_token"), // Encrypted token for container's HTTP API
   containerPort: integer("container_port"), // Host port mapped to container's 3000
+  settings: jsonb("settings").default({}), // { timezone, thinkingLevel, heartbeatInterval, etc. }
   lastActive: timestamp("last_active"),
   totalUptime: integer("total_uptime").default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -313,6 +314,33 @@ export const waitlist = pgTable("waitlist", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Agent Secrets (encrypted tool API keys)
+export const agentSecrets = pgTable("agent_secrets", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agents.id, { onDelete: "cascade" }),
+  key: text("key").notNull(),              // env var name, e.g. "BRAVE_SEARCH_API_KEY"
+  encryptedValue: text("encrypted_value").notNull(),
+  label: text("label"),                    // Human-readable: "Brave Search API Key"
+  category: text("category").default("tool"), // "tool", "provider", "custom"
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Agent Logs
+export const agentLogs = pgTable("agent_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agents.id, { onDelete: "cascade" }),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  level: text("level").default("info"),
+  message: text("message").notNull(),
+  source: text("source").default("container"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // ============================================
 // RELATIONS
 // ============================================
@@ -348,6 +376,8 @@ export const agentsRelations = relations(agents, ({ one, many }) => ({
   subscriptions: many(subscriptions),
   commands: many(agentCommands),
   messages: many(agentMessages),
+  secrets: many(agentSecrets),
+  logs: many(agentLogs),
 }));
 
 export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
@@ -379,4 +409,12 @@ export const agentMessagesRelations = relations(agentMessages, ({ one }) => ({
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
   user: one(user, { fields: [userPreferences.userId], references: [user.id] }),
+}));
+
+export const agentSecretsRelations = relations(agentSecrets, ({ one }) => ({
+  agent: one(agents, { fields: [agentSecrets.agentId], references: [agents.id] }),
+}));
+
+export const agentLogsRelations = relations(agentLogs, ({ one }) => ({
+  agent: one(agents, { fields: [agentLogs.agentId], references: [agents.id] }),
 }));

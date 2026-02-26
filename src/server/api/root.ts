@@ -8,6 +8,9 @@ import { billingRouter } from "./routers/billing";
 import { connectRouter } from "./routers/connect";
 import { messagesRouter } from "./routers/messages";
 import { adminRouter } from "./routers/admin";
+import { secretsRouter } from "./routers/secrets";
+import { logsRouter } from "./routers/logs";
+import { agentSettingsRouter } from "./routers/agentSettings";
 
 export const appRouter = router({
   hosts: hostsRouter,
@@ -19,6 +22,9 @@ export const appRouter = router({
   connect: connectRouter,
   messages: messagesRouter,
   admin: adminRouter,
+  secrets: secretsRouter,
+  logs: logsRouter,
+  agentSettings: agentSettingsRouter,
 });
 
 export type AppRouter = typeof appRouter;

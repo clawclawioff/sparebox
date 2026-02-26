@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, randomBytes } from "crypto";
 import { db } from "@/db";
-import { agents, hostApiKeys } from "@/db/schema";
+import { agents, hostApiKeys, agentSecrets } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { decrypt, encrypt } from "@/lib/encryption";
 import { API_KEY_PREFIX, TIERS, type TierKey } from "@/lib/constants";
@@ -107,6 +107,24 @@ export async function GET(
 
   // Note: OPENCLAW_GATEWAY_TOKEN is set below after gateway token is generated
 
+  // Read agent secrets and inject as env vars
+  const secrets = await db.query.agentSecrets.findMany({
+    where: eq(agentSecrets.agentId, agentId),
+  });
+  for (const secret of secrets) {
+    try {
+      env[secret.key] = decrypt(secret.encryptedValue);
+    } catch (err) {
+      console.error(`[deploy-config] Failed to decrypt secret ${secret.key} for agent ${agentId}`);
+    }
+  }
+
+  // Apply agent settings
+  const settings = (agent.settings as Record<string, unknown>) || {};
+  if (settings.timezone && typeof settings.timezone === "string") {
+    env.TZ = settings.timezone;
+  }
+
   // 5. Generate gateway token for direct HTTP chat (Chat V2)
   //    If agent doesn't have one, generate and store it
   let gatewayToken: string;
@@ -163,12 +181,12 @@ export async function GET(
     cron: {
       webhookToken: gatewayToken,
     },
-    // Web search — platform-provided Brave Search API key
-    ...(process.env.BRAVE_SEARCH_API_KEY ? {
+    // Web search — user's key takes priority over platform key
+    ...((env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_SEARCH_API_KEY) ? {
       tools: {
         web: {
           search: {
-            apiKey: process.env.BRAVE_SEARCH_API_KEY,
+            apiKey: env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_SEARCH_API_KEY,
           },
         },
       },

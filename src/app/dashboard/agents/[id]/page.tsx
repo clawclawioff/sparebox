@@ -21,9 +21,13 @@ import {
   Bot,
   User,
   AlertCircle,
+  Settings,
+  ScrollText,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { TIERS, type TierKey } from "@/lib/constants";
+import { AgentSettings } from "@/components/agents/AgentSettings";
+import { AgentLogs } from "@/components/agents/AgentLogs";
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
@@ -518,7 +522,7 @@ export default function AgentDetailsPage() {
   const params = useParams();
   const agentId = params.id as string;
 
-  const [activeTab, setActiveTab] = useState<"overview" | "chat" | "logs" | "config">(
+  const [activeTab, setActiveTab] = useState<"overview" | "chat" | "settings" | "logs">(
     "overview"
   );
 
@@ -767,24 +771,25 @@ export default function AgentDetailsPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6">
-        {(["overview", "chat", "logs", "config"] as const).map((tab) => (
+        {([
+          { key: "overview", label: "Overview", icon: null },
+          { key: "chat", label: "Chat", icon: MessageSquare },
+          { key: "settings", label: "Settings", icon: Settings },
+          { key: "logs", label: "Logs", icon: ScrollText },
+        ] as const).map(({ key, label, icon: Icon }) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
+            key={key}
+            onClick={() => setActiveTab(key)}
             className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-              activeTab === tab
+              activeTab === key
                 ? "bg-muted text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {tab === "chat" ? (
-              <span className="flex items-center gap-1.5">
-                <MessageSquare className="w-3.5 h-3.5" />
-                Chat
-              </span>
-            ) : (
-              tab.charAt(0).toUpperCase() + tab.slice(1)
-            )}
+            <span className="flex items-center gap-1.5">
+              {Icon && <Icon className="w-3.5 h-3.5" />}
+              {label}
+            </span>
           </button>
         ))}
       </div>
@@ -914,51 +919,12 @@ export default function AgentDetailsPage() {
         <AgentChat agentId={agentId} agentStatus={agent.status} />
       )}
 
-      {activeTab === "logs" && (
-        <div className="bg-card border border-border rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-foreground">
-              Logs (Last 100 lines)
-            </h3>
-            <button className="text-sm text-primary hover:underline">
-              Download Full
-            </button>
-          </div>
-          <div className="bg-muted rounded-lg p-4 font-mono text-xs text-muted-foreground h-80 overflow-y-auto">
-            <p className="text-muted-foreground/70">
-              Logs will appear here when the agent is running...
-            </p>
-            {/* TODO: Implement real-time logs */}
-          </div>
-        </div>
+      {activeTab === "settings" && (
+        <AgentSettings agentId={agentId} />
       )}
 
-      {activeTab === "config" && (
-        <div className="bg-card border border-border rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-foreground">Configuration</h3>
-            <button className="text-sm text-primary hover:underline">
-              Edit
-            </button>
-          </div>
-          <div className="bg-muted rounded-lg p-4 font-mono text-xs text-foreground h-80 overflow-y-auto">
-            <pre>
-              {(agent.config &&
-                Object.keys(agent.config as Record<string, unknown>).length > 0
-                ? JSON.stringify(agent.config, null, 2)
-                : null) ||
-                `# openclaw.yaml
-auth:
-  provider: anthropic
-  apiKey: $ANTHROPIC_API_KEY
-channels:
-  telegram:
-    enabled: true
-    botToken: $TELEGRAM_BOT_TOKEN
-`}
-            </pre>
-          </div>
-        </div>
+      {activeTab === "logs" && (
+        <AgentLogs agentId={agentId} />
       )}
     </div>
   );
