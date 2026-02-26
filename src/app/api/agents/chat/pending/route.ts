@@ -96,6 +96,9 @@ export async function GET(req: NextRequest) {
           content: msg.content,
           containerPort: agent?.containerPort ?? null,
           gatewayToken,
+          // Stable user ID so OpenClaw maintains session continuity
+          // (without this, each request creates a new session)
+          sessionUser: `sparebox-${msg.agentId}`,
         };
       });
 

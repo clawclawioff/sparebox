@@ -1607,7 +1607,7 @@ async function chatRelayLoop(config) {
 }
 
 async function relayMessage(config, msg) {
-  const { messageId, agentId, content, containerPort, gatewayToken } = msg;
+  const { messageId, agentId, content, containerPort, gatewayToken, sessionUser } = msg;
   const respondUrl = `${config.apiUrl}/api/agents/${agentId}/chat/respond`;
 
   if (!containerPort || !gatewayToken) {
@@ -1622,7 +1622,10 @@ async function relayMessage(config, msg) {
 
     const body = JSON.stringify({
       messages: [{ role: "user", content }],
-      stream: false
+      stream: false,
+      // Stable user ID so OpenClaw derives a consistent session key
+      // Without this, every request creates a new stateless session
+      user: sessionUser || `sparebox-${agentId}`,
     });
 
     const res = await httpRequest(containerUrl, {
