@@ -105,6 +105,8 @@ export async function GET(
   // Set agent name
   env.OPENCLAW_AGENT_NAME = agent.name;
 
+  // Note: OPENCLAW_GATEWAY_TOKEN is set below after gateway token is generated
+
   // 5. Generate gateway token for direct HTTP chat (Chat V2)
   //    If agent doesn't have one, generate and store it
   let gatewayToken: string;
@@ -123,6 +125,10 @@ export async function GET(
     console.log(`[deploy-config] Generated gateway token for agent ${agentId}`);
   }
 
+  // Set gateway token as env var so OpenClaw's internal tools (cron, etc.)
+  // can authenticate to the gateway when bind=lan (non-loopback connections)
+  env.OPENCLAW_GATEWAY_TOKEN = gatewayToken;
+
   // 6. Determine model for OpenClaw config
   const modelPrimary = env.OPENCLAW_MODEL || 
     (env.OPENCLAW_PROVIDER === "openai" ? "openai/gpt-5-mini" : "anthropic/claude-sonnet-4-6");
@@ -135,6 +141,7 @@ export async function GET(
   const openclawConfig = {
     // Gateway config with HTTP API enabled
     gateway: {
+      mode: "local" as const,
       // Port 3000 matches Docker's internal port mapping ({hostPort}:3000)
       port: 3000,
       // Bind to 0.0.0.0 so Docker can forward traffic into the container
@@ -162,6 +169,8 @@ export async function GET(
         model: {
           primary: modelPrimary,
         },
+        // Workspace is mounted at /workspace in the container
+        workspace: "/workspace",
       },
     },
   };
