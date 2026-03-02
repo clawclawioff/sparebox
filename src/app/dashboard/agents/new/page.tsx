@@ -45,9 +45,9 @@ const LLM_PROVIDERS: {
     placeholder: "sk-ant-...",
     keyUrl: "https://console.anthropic.com/settings/keys",
     models: [
-      { id: "claude-sonnet-4-20250514", name: "Claude Sonnet 4", recommended: true },
-      { id: "claude-haiku-3-20250307", name: "Claude Haiku" },
-      { id: "claude-opus-4-20250514", name: "Claude Opus" },
+      { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", recommended: true },
+      { id: "claude-haiku-4-5", name: "Claude Haiku 4.5" },
+      { id: "claude-opus-4-6", name: "Claude Opus 4.6" },
     ],
   },
   {
@@ -57,8 +57,8 @@ const LLM_PROVIDERS: {
     placeholder: "sk-...",
     keyUrl: "https://platform.openai.com/api-keys",
     models: [
-      { id: "gpt-4o", name: "GPT-4o", recommended: true },
-      { id: "gpt-4o-mini", name: "GPT-4o mini" },
+      { id: "gpt-5-mini", name: "GPT-5 mini", recommended: true },
+      { id: "gpt-5", name: "GPT-5" },
     ],
   },
   {
@@ -68,8 +68,8 @@ const LLM_PROVIDERS: {
     placeholder: "AI...",
     keyUrl: "https://aistudio.google.com/apikey",
     models: [
-      { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", recommended: true },
-      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
+      { id: "gemini-3-flash", name: "Gemini 3 Flash", recommended: true },
+      { id: "gemini-3-pro", name: "Gemini 3 Pro" },
     ],
   },
 ];
@@ -101,7 +101,7 @@ export default function DeployAgentPage() {
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [llmProvider, setLlmProvider] = useState<LLMProvider>("anthropic");
-  const [llmModel, setLlmModel] = useState<string>("claude-sonnet-4-20250514");
+  const [llmModel, setLlmModel] = useState<string>("claude-sonnet-4-6");
   const [isDeploying, setIsDeploying] = useState(false);
   const [error, setError] = useState("");
 

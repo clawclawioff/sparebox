@@ -433,7 +433,7 @@ async function handleDeploy(cmd: Command): Promise<CommandAck> {
           agents: {
             defaults: {
               model: {
-                primary: isOpenAI ? "openai/gpt-4o" : "anthropic/claude-sonnet-4-20250514",
+                primary: isOpenAI ? "openai/gpt-5-mini" : "anthropic/claude-sonnet-4-6",
               },
             },
           },

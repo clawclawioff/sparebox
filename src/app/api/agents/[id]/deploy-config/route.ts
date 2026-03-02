@@ -94,9 +94,9 @@ export async function GET(
   };
 
   const providerDefaultModel: Record<string, string> = {
-    anthropic: "anthropic/claude-sonnet-4-20250514",
-    openai: "openai/gpt-4o",
-    google: "google/gemini-2.5-pro",
+    anthropic: "anthropic/claude-sonnet-4-6",
+    openai: "openai/gpt-5-mini",
+    google: "google/gemini-3-flash",
   };
 
   if (apiKeyPlaintext) {
@@ -111,7 +111,7 @@ export async function GET(
   } else if (agentConfig.model && typeof agentConfig.model === "string") {
     env.OPENCLAW_MODEL = agentConfig.model;
   } else {
-    env.OPENCLAW_MODEL = providerDefaultModel[effectiveProvider] || "anthropic/claude-sonnet-4-20250514";
+    env.OPENCLAW_MODEL = providerDefaultModel[effectiveProvider] || "anthropic/claude-sonnet-4-6";
   }
 
   // Set agent name
