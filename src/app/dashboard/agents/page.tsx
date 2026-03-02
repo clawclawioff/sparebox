@@ -2,7 +2,8 @@
 
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { Cpu, Plus, Play, Square, Trash2, ExternalLink, Check } from "lucide-react";
 
 function StatusBadge({ status }: { status: string }) {
@@ -38,11 +39,24 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function AgentsPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const justDeployed = searchParams.get("deployed") === "true";
 
   const utils = trpc.useUtils();
   const { data: rawAgents, isLoading } = trpc.agents.list.useQuery();
   const agents = rawAgents?.filter((a) => a.status !== "deleted");
+
+  // If just deployed, find the deploying agent and redirect to provisioning
+  useEffect(() => {
+    if (justDeployed && agents && agents.length > 0) {
+      const deployingAgent = agents.find(
+        (a) => a.status === "deploying" || a.status === "pending"
+      );
+      if (deployingAgent) {
+        router.replace(`/dashboard/agents/${deployingAgent.id}/provisioning`);
+      }
+    }
+  }, [justDeployed, agents, router]);
   const stopAgent = trpc.agents.stop.useMutation({ onSuccess: () => utils.agents.list.invalidate() });
   const startAgent = trpc.agents.start.useMutation({ onSuccess: () => utils.agents.list.invalidate() });
   const deleteAgent = trpc.agents.delete.useMutation({

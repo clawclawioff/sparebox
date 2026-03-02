@@ -3,7 +3,7 @@
 import { trpc } from "@/lib/trpc";
 import Link from "next/link";
 import { useState } from "react";
-import { Server, MapPin, Cpu, HardDrive, Activity } from "lucide-react";
+import { Server, MapPin, Cpu, HardDrive, Activity, Monitor } from "lucide-react";
 import { TIERS, type TierKey } from "@/lib/constants";
 
 function LastSeenBadge({ lastHeartbeat }: { lastHeartbeat: Date | string | null | undefined }) {
@@ -99,6 +99,7 @@ export default function BrowseHostsPage() {
   const [region, setRegion] = useState<string>("");
   const [minRam, setMinRam] = useState<string>("");
   const [maxPrice, setMaxPrice] = useState<string>("");
+  const [gpuOnly, setGpuOnly] = useState(false);
 
   const { data: hosts, isLoading } = trpc.hosts.listAvailable.useQuery({
     region: region || undefined,
@@ -151,9 +152,18 @@ export default function BrowseHostsPage() {
           <option value="50">Under $50/mo</option>
           <option value="100">Under $100/mo</option>
         </select>
-        {(region || minRam || maxPrice) && (
+        <label className="inline-flex items-center gap-2 px-3 py-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={gpuOnly}
+            onChange={(e) => setGpuOnly(e.target.checked)}
+            className="rounded border-border"
+          />
+          <span className="text-sm text-foreground">🎮 GPU only</span>
+        </label>
+        {(region || minRam || maxPrice || gpuOnly) && (
           <button
-            onClick={() => { setRegion(""); setMinRam(""); setMaxPrice(""); }}
+            onClick={() => { setRegion(""); setMinRam(""); setMaxPrice(""); setGpuOnly(false); }}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2"
           >
             Clear filters
@@ -186,13 +196,22 @@ export default function BrowseHostsPage() {
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">{hosts.length} hosts available</p>
           <div className="grid gap-4">
-            {hosts.map((host) => {
+            {hosts
+            .filter((host) => {
+              if (!gpuOnly) return true;
+              const hostAny = host as unknown as Record<string, unknown>;
+              return !!(hostAny.gpuModel);
+            })
+            .map((host) => {
               const hostAny = host as unknown as Record<string, unknown>;
               const isolationMode = hostAny.isolationMode as string | null | undefined;
               const maxAgents = hostAny.maxAgents as number | null | undefined;
               const hostedAgentCount = Array.isArray(hostAny.agents)
                 ? (hostAny.agents as unknown[]).length
                 : null;
+              const gpuModel = hostAny.gpuModel as string | null | undefined;
+              const gpuVramGb = hostAny.gpuVramGb as number | null | undefined;
+              const availableSlots = hostAny.availableSlots as number | null | undefined;
 
               return (
                 <div
@@ -261,13 +280,24 @@ export default function BrowseHostsPage() {
                             {host.uptimePercent.toFixed(1)}% uptime
                           </span>
                         )}
-                        {maxAgents && maxAgents > 0 && (
+                        {gpuModel && (
+                          <span className="flex items-center gap-1.5 text-primary font-medium">
+                            <Monitor className="w-4 h-4" />
+                            🎮 {gpuModel}{gpuVramGb ? ` • ${gpuVramGb}GB VRAM` : ""}
+                          </span>
+                        )}
+                        {(availableSlots !== null && availableSlots !== undefined) ? (
+                          <span className="flex items-center gap-1.5 text-xs">
+                            <span className={`w-2 h-2 rounded-full ${availableSlots > 0 ? "bg-green-500" : "bg-red-500"}`} />
+                            {availableSlots} slot{availableSlots !== 1 ? "s" : ""} available
+                          </span>
+                        ) : maxAgents && maxAgents > 0 ? (
                           <span className="flex items-center gap-1.5 text-xs">
                             {hostedAgentCount !== null
                               ? `${maxAgents - (hostedAgentCount as number)}/${maxAgents} slots`
                               : `${maxAgents} slots`}
                           </span>
-                        )}
+                        ) : null}
                       </div>
 
                       {/* Per-tier pricing chips */}
