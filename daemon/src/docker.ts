@@ -139,8 +139,10 @@ export async function createContainer(opts: ContainerCreateOpts): Promise<string
     // Resource limits
     "--memory", `${opts.ramMb}m`,
     "--cpus", `${opts.cpuCores}`,
-    // Security hardening
-    "--read-only",
+    "--pids-limit=256",
+    "--ulimit", "nofile=65536:65536",
+    // TODO: --storage-opt size=XG requires overlay2+xfs backing filesystem, skip for now
+    // Security hardening (writable rootfs so agents can apt/pip/npm install)
     "--cap-drop=ALL",
     "--security-opt=no-new-privileges",
     // Networking
@@ -149,8 +151,8 @@ export async function createContainer(opts: ContainerCreateOpts): Promise<string
     // Volume mounts — workspace and state
     "-v", `${opts.workspaceDir}:/workspace`,
     "-v", `${opts.stateDir}:/state`,
-    // Tmpfs for /tmp so read-only rootfs still works
-    "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m",
+    // Tmpfs for /tmp (nosuid but no noexec so scripts work)
+    "--tmpfs", "/tmp:rw,nosuid,size=512m",
   ];
 
   // Environment variables

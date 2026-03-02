@@ -65,6 +65,8 @@ export interface CommandAck {
   status: "acked" | "error";
   containerId?: string;
   error?: string;
+  stage?: "pulling" | "creating" | "starting" | "health_check" | "ready";
+  progress?: number;
 }
 
 export interface AgentRecord {
@@ -183,6 +185,41 @@ export function getAgentRecordsForMessaging(): Map<string, { containerId: string
     }
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Resource tracking
+// ---------------------------------------------------------------------------
+
+const RESERVED_RAM_MB = 1024; // 1GB for host OS + daemon
+const RESERVED_CPU_CORES = 1;
+
+/**
+ * Sum of resources allocated to all deployed agents.
+ */
+export function getAllocatedResources(): { ramMb: number; cpuCores: number; diskGb: number } {
+  let ramMb = 0;
+  let cpuCores = 0;
+  let diskGb = 0;
+  for (const agent of agents.values()) {
+    ramMb += agent.resources.ramMb;
+    cpuCores += agent.resources.cpuCores;
+    diskGb += agent.resources.diskGb;
+  }
+  return { ramMb, cpuCores, diskGb };
+}
+
+/**
+ * Remaining resources available for new agents.
+ */
+export function getRemainingResources(totalRamGb: number, cpuCores: number): { ramMb: number; cpuCores: number; diskGb: number } {
+  const allocated = getAllocatedResources();
+  const totalRamMb = totalRamGb * 1024;
+  return {
+    ramMb: Math.max(0, totalRamMb - RESERVED_RAM_MB - allocated.ramMb),
+    cpuCores: Math.max(0, cpuCores - RESERVED_CPU_CORES - allocated.cpuCores),
+    diskGb: Math.max(0, 0 - allocated.diskGb), // disk total not passed here; platform knows total from heartbeat
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -311,8 +348,13 @@ async function handleDeploy(cmd: Command): Promise<CommandAck> {
   let pid: number | null = null;
 
   if (isolationMode === "docker") {
-    // Pull image first
+    // Stage: pulling
+    queueAcks([{ id, status: "acked", stage: "pulling", progress: 0 }]);
+
     await pullImage(image);
+
+    // Stage: creating
+    queueAcks([{ id, status: "acked", stage: "creating" }]);
 
     containerId = await createContainer({
       name: profile,
@@ -325,8 +367,12 @@ async function handleDeploy(cmd: Command): Promise<CommandAck> {
       env: agentEnv,
     });
 
+    // Stage: starting
+    queueAcks([{ id, status: "acked", stage: "starting", containerId }]);
+
     // Wait for container to be running
     let healthy = false;
+    queueAcks([{ id, status: "acked", stage: "health_check", containerId }]);
     for (let i = 0; i < 10; i++) {
       await sleep(1000);
       if (await isContainerRunning(containerId)) {
@@ -429,7 +475,7 @@ async function handleDeploy(cmd: Command): Promise<CommandAck> {
   saveAgents();
 
   log("INFO", `Agent ${agentId} deployed: ${containerId ?? `pid:${pid}`} on port ${port}`);
-  return { id, status: "acked", containerId: containerId ?? `pid:${pid}` };
+  return { id, status: "acked", containerId: containerId ?? `pid:${pid}`, stage: "ready" };
 }
 
 async function handleStart(cmd: Command): Promise<CommandAck> {

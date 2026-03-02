@@ -2,7 +2,7 @@ import * as https from "node:https";
 import * as http from "node:http";
 import { URL } from "node:url";
 import { log } from "./log.js";
-import { getCpuUsage, getRamUsage, getDiskUsage, getOsInfo, getTotalRamGb, getTotalDiskGb, getCpuCores, getCpuModel } from "./metrics.js";
+import { getCpuUsage, getRamUsage, getDiskUsage, getOsInfo, getTotalRamGb, getTotalDiskGb, getCpuCores, getCpuModel, getGpuInfo } from "./metrics.js";
 import {
   processCommands,
   queueAcks,
@@ -11,6 +11,8 @@ import {
   getAgentCount,
   getIsolationMode,
   getAgentRecordsForMessaging,
+  getAllocatedResources,
+  getRemainingResources,
   type Command,
   type CommandAck,
   type AgentStatus,
@@ -44,6 +46,11 @@ export interface HeartbeatPayload {
   cpuModel: string;
   isolationMode: string;
   openclawVersion: string;
+  gpuModel: string | null;
+  gpuVramGb: number | null;
+  gpuUsage: number | null;
+  allocatedResources: { ramMb: number; cpuCores: number; diskGb: number };
+  remainingResources: { ramMb: number; cpuCores: number; diskGb: number };
   commandAcks: CommandAck[];
   messageResponses: MessageResponse[];
 }
@@ -158,13 +165,18 @@ export async function sendHeartbeat(
   daemonVersion: string
 ): Promise<HeartbeatResponse | null> {
   // Collect metrics (CPU sampling takes ~1s)
-  const [cpuUsage, diskUsage, totalDiskGb, agentStatuses] = await Promise.all([
+  const [cpuUsage, diskUsage, totalDiskGb, agentStatuses, gpuInfo] = await Promise.all([
     getCpuUsage(),
     getDiskUsage(),
     getTotalDiskGb(),
     getAgentStatuses(),
+    getGpuInfo(),
   ]);
   const ramUsage = getRamUsage();
+  const totalRamGb = getTotalRamGb();
+  const cpuCores = getCpuCores();
+  const allocatedResources = getAllocatedResources();
+  const remainingResources = getRemainingResources(totalRamGb, cpuCores);
 
   // Drain pending command acks and message responses
   const commandAcks = drainAcks();
@@ -180,12 +192,17 @@ export async function sendHeartbeat(
     osInfo: getOsInfo(),
     nodeVersion: process.version,
     uptime: Math.round((Date.now() - startTime) / 1000),
-    totalRamGb: getTotalRamGb(),
+    totalRamGb,
     totalDiskGb: totalDiskGb >= 0 ? totalDiskGb : 0,
-    cpuCores: getCpuCores(),
+    cpuCores,
     cpuModel: getCpuModel(),
     isolationMode: getIsolationMode(),
     openclawVersion,
+    gpuModel: gpuInfo.model,
+    gpuVramGb: gpuInfo.vramGb,
+    gpuUsage: gpuInfo.usage,
+    allocatedResources,
+    remainingResources,
     commandAcks,
     messageResponses,
   };
