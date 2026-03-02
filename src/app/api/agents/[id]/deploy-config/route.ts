@@ -81,25 +81,37 @@ export async function GET(
   //    so the running agent (docker or profile) can use them.
   const env: Record<string, string> = {};
 
-  if (apiKeyPlaintext) {
-    const configProvider = (agentConfig as Record<string, unknown>).provider as string | undefined;
+  // Determine LLM provider: prefer explicit llmProvider field, fall back to config
+  const effectiveProvider = agent.llmProvider
+    || (agentConfig as Record<string, unknown>).provider as string | undefined
+    || "anthropic";
 
-    if (configProvider === "openai" || apiKeyPlaintext.startsWith("sk-") && !apiKeyPlaintext.startsWith("sk-ant-")) {
-      env.OPENAI_API_KEY = apiKeyPlaintext;
-      env.OPENCLAW_PROVIDER = "openai";
-    } else {
-      env.ANTHROPIC_API_KEY = apiKeyPlaintext;
-      env.OPENCLAW_PROVIDER = "anthropic";
-    }
+  // Map provider to env vars
+  const providerEnvKeyMap: Record<string, string> = {
+    anthropic: "ANTHROPIC_API_KEY",
+    openai: "OPENAI_API_KEY",
+    google: "GOOGLE_API_KEY",
+  };
+
+  const providerDefaultModel: Record<string, string> = {
+    anthropic: "anthropic/claude-sonnet-4-20250514",
+    openai: "openai/gpt-4o",
+    google: "google/gemini-2.5-pro",
+  };
+
+  if (apiKeyPlaintext) {
+    const envKey = providerEnvKeyMap[effectiveProvider] || "ANTHROPIC_API_KEY";
+    env[envKey] = apiKeyPlaintext;
+    env.OPENCLAW_PROVIDER = effectiveProvider;
   }
 
-  // Set model from config if provided, or default based on provider
-  if (agentConfig.model && typeof agentConfig.model === "string") {
+  // Set model: explicit llmModel > config model > provider default
+  if (agent.llmModel) {
+    env.OPENCLAW_MODEL = agent.llmModel;
+  } else if (agentConfig.model && typeof agentConfig.model === "string") {
     env.OPENCLAW_MODEL = agentConfig.model;
-  } else if (env.OPENCLAW_PROVIDER === "openai") {
-    env.OPENCLAW_MODEL = "openai/gpt-5-mini";
-  } else if (env.OPENCLAW_PROVIDER === "anthropic") {
-    env.OPENCLAW_MODEL = "anthropic/claude-sonnet-4-6";
+  } else {
+    env.OPENCLAW_MODEL = providerDefaultModel[effectiveProvider] || "anthropic/claude-sonnet-4-20250514";
   }
 
   // Set agent name

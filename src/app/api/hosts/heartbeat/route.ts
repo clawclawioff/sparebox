@@ -63,6 +63,22 @@ const heartbeatSchema = z.object({
   // Docker/isolation info
   isolationMode: z.enum(["docker", "podman", "profile", "none"]).optional(),
   openclawVersion: z.string().max(50).optional(),
+  // GPU info
+  gpuModel: z.string().max(200).optional(),
+  gpuVramGb: z.number().min(0).optional(),
+  dockerVersion: z.string().max(50).optional(),
+  arch: z.string().max(20).optional(),
+  // Resource allocation
+  allocatedResources: z.object({
+    ramMb: z.number().min(0),
+    cpuCores: z.number().min(0),
+    diskGb: z.number().min(0),
+  }).optional(),
+  remainingResources: z.object({
+    ramMb: z.number().min(0),
+    cpuCores: z.number().min(0),
+    diskGb: z.number().min(0),
+  }).optional(),
   // Command acknowledgments from previous heartbeat
   commandAcks: z
     .array(
@@ -71,6 +87,8 @@ const heartbeatSchema = z.object({
         status: z.enum(["acked", "failed"]),
         error: z.string().max(1000).optional(),
         containerId: z.string().max(100).optional(),
+        deployStage: z.enum(["pulling", "creating", "starting", "health_check", "ready"]).optional(),
+        deployProgress: z.number().int().min(0).max(100).optional(),
       })
     )
     .default([]),
@@ -169,17 +187,38 @@ export async function POST(req: NextRequest) {
   });
 
   // 7. Update host record (always update telemetry, but don't override suspended status)
+  const hostUpdate: Record<string, unknown> = {
+    lastHeartbeat: new Date(),
+    daemonVersion: data.daemonVersion,
+    nodeVersion: data.nodeVersion || null,
+    publicIp: data.publicIp || null,
+    isolationMode: data.isolationMode || null,
+    openclawVersion: data.openclawVersion || null,
+    updatedAt: new Date(),
+  };
+
+  // GPU and system info
+  if (data.gpuModel !== undefined) hostUpdate.gpuModel = data.gpuModel;
+  if (data.gpuVramGb !== undefined) hostUpdate.gpuVramGb = data.gpuVramGb;
+  if (data.dockerVersion !== undefined) hostUpdate.dockerVersion = data.dockerVersion;
+  if (data.arch !== undefined) hostUpdate.arch = data.arch;
+
+  // Resource allocation tracking
+  if (data.allocatedResources) {
+    hostUpdate.allocatedRamMb = data.allocatedResources.ramMb;
+    hostUpdate.allocatedCpuCores = data.allocatedResources.cpuCores;
+    hostUpdate.allocatedDiskGb = data.allocatedResources.diskGb;
+  }
+
+  // Calculate can_accept_agents from remaining resources
+  if (data.remainingResources) {
+    hostUpdate.canAcceptAgents =
+      data.remainingResources.ramMb >= 1024 && data.remainingResources.cpuCores >= 0.5;
+  }
+
   await db
     .update(hosts)
-    .set({
-      lastHeartbeat: new Date(),
-      daemonVersion: data.daemonVersion,
-      nodeVersion: data.nodeVersion || null,
-      publicIp: data.publicIp || null,
-      isolationMode: data.isolationMode || null,
-      openclawVersion: data.openclawVersion || null,
-      updatedAt: new Date(),
-    })
+    .set(hostUpdate)
     .where(eq(hosts.id, keyRecord.hostId));
 
   // Only change status to active if currently inactive (not pending or suspended)
@@ -282,6 +321,17 @@ export async function POST(req: NextRequest) {
           columns: { agentId: true, type: true },
         });
 
+        // Update deploy stage/progress if provided (even before final ack)
+        if (cmd && (ack.deployStage || ack.deployProgress !== undefined)) {
+          const deployUpdate: Record<string, unknown> = { updatedAt: new Date() };
+          if (ack.deployStage) deployUpdate.deployStage = ack.deployStage;
+          if (ack.deployProgress !== undefined) deployUpdate.deployProgress = ack.deployProgress;
+          await db
+            .update(agents)
+            .set(deployUpdate)
+            .where(eq(agents.id, cmd.agentId));
+        }
+
         if (cmd && ack.status === "acked") {
           if (cmd.type === "deploy" || cmd.type === "start" || cmd.type === "restart") {
             await db
@@ -289,6 +339,8 @@ export async function POST(req: NextRequest) {
               .set({
                 status: "running",
                 containerId: ack.containerId || null,
+                deployStage: "ready",
+                deployProgress: 100,
                 updatedAt: new Date(),
               })
               .where(eq(agents.id, cmd.agentId));

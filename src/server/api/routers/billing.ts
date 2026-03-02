@@ -17,6 +17,8 @@ export const billingRouter = router({
         config: z.string().optional(),
         apiKey: z.string().optional(),
         provider: z.enum(["anthropic", "openai"]).default("anthropic"),
+        llmProvider: z.enum(["anthropic", "openai", "google"]).optional(),
+        llmModel: z.string().max(100).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -100,6 +102,8 @@ export const billingRouter = router({
           config: input.config || "",
           apiKey: input.apiKey || "",
           provider: input.provider,
+          llmProvider: input.llmProvider || input.provider || "anthropic",
+          llmModel: input.llmModel || "",
         },
         success_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.sparebox.dev"}/dashboard/agents?deployed=true`,
         cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || "https://www.sparebox.dev"}/dashboard/agents/new`,

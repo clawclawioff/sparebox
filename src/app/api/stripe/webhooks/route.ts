@@ -135,9 +135,11 @@ async function handleCheckoutCompleted(session: any) {
     return;
   }
 
-  const { userId, agentName, hostId, config, tier: metadataTier, apiKey: rawApiKey, provider: rawProvider } = metadata;
+  const { userId, agentName, hostId, config, tier: metadataTier, apiKey: rawApiKey, provider: rawProvider, llmProvider: rawLlmProvider, llmModel: rawLlmModel } = metadata;
   const tier = (metadataTier as TierKey) || "standard";
   const provider = rawProvider || "anthropic";
+  const llmProvider = rawLlmProvider || provider || "anthropic";
+  const llmModel = rawLlmModel || "";
 
   // Idempotency: check if we already created an agent for this checkout session
   const stripeSubscriptionId = typeof session.subscription === "string"
@@ -218,6 +220,8 @@ async function handleCheckoutCompleted(session: any) {
         config: config ? { ...JSON.parse(config), provider } : { provider },
         tier: tier,
         status: "pending",
+        llmProvider: llmProvider,
+        llmModel: llmModel || null,
         ...(rawApiKey ? { encryptedApiKey: encrypt(rawApiKey) } : {}),
       })
       .returning();

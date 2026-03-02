@@ -375,6 +375,39 @@ export const agentsRouter = router({
       });
     }),
 
+  // Get deploy status for polling
+  getDeployStatus: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const agent = await ctx.db.query.agents.findFirst({
+        where: eq(agents.id, input.id),
+        columns: {
+          id: true,
+          userId: true,
+          status: true,
+          deployStage: true,
+          deployProgress: true,
+        },
+      });
+
+      if (!agent || agent.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Agent not found" });
+      }
+
+      const stageTimeEstimates: Record<string, number> = {
+        pulling: 60, creating: 15, starting: 10, health_check: 5, ready: 0,
+      };
+
+      return {
+        stage: agent.deployStage,
+        progress: agent.deployProgress,
+        error: agent.status === "failed" ? "Deployment failed" : null,
+        estimatedTimeRemaining: agent.deployStage
+          ? stageTimeEstimates[agent.deployStage] ?? null
+          : null,
+      };
+    }),
+
   // Delete an agent (soft delete — preserves subscription/earnings history)
   delete: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))

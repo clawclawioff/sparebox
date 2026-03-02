@@ -216,7 +216,7 @@ export const hostsRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const filters = input || {};
-      const conditions = [eq(hosts.status, "active")];
+      const conditions = [eq(hosts.status, "active"), eq(hosts.canAcceptAgents, true)];
 
       if (filters.region) {
         conditions.push(eq(hosts.region, filters.region));
@@ -251,6 +251,11 @@ export const hostsRouter = router({
           uptimePercent: true,
           status: true,
           lastHeartbeat: true,
+          gpuModel: true,
+          allocatedRamMb: true,
+          allocatedCpuCores: true,
+          allocatedDiskGb: true,
+          canAcceptAgents: true,
         },
       });
 
@@ -293,7 +298,12 @@ export const hostsRouter = router({
       }
 
       // Filter out any hosts that became inactive
-      return results.filter(h => h.status === "active");
+      return results.filter(h => h.status === "active").map(h => ({
+        ...h,
+        availableSlots: h.ramGb
+          ? Math.max(0, Math.floor(((h.ramGb * 1024) - (h.allocatedRamMb ?? 0)) / 1024))
+          : null,
+      }));
     }),
 
   // Get host stats (earnings, agent count, etc.)

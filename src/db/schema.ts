@@ -138,6 +138,20 @@ export const hosts = pgTable("hosts", {
   verifiedOsInfo: text("verified_os_info"),
   verifiedAt: timestamp("verified_at"),
 
+  // GPU info
+  gpuModel: text("gpu_model"),
+  gpuVramGb: real("gpu_vram_gb"),
+
+  // System info
+  dockerVersion: text("docker_version"),
+  arch: text("arch"), // x64, arm64
+
+  // Resource allocation tracking
+  allocatedRamMb: integer("allocated_ram_mb").default(0),
+  allocatedCpuCores: real("allocated_cpu_cores").default(0),
+  allocatedDiskGb: integer("allocated_disk_gb").default(0),
+  canAcceptAgents: boolean("can_accept_agents").default(true),
+
   // Networking
   tailscaleIp: text("tailscale_ip"),
   publicIp: text("public_ip"),
@@ -169,6 +183,12 @@ export const agents = pgTable("agents", {
   workspaceFiles: jsonb("workspace_files").default({}),
   encryptedApiKey: text("encrypted_api_key"),
   containerId: text("container_id"),
+  // Deploy progress tracking
+  deployStage: text("deploy_stage"), // pulling, creating, starting, health_check, ready
+  deployProgress: integer("deploy_progress"), // 0-100
+  // LLM provider config
+  llmProvider: text("llm_provider"), // anthropic, openai, google
+  llmModel: text("llm_model"),
   isolationMode: text("isolation_mode").default("docker"),
   openclawVersion: text("openclaw_version").default("latest"),
   // Chat V2: Direct HTTP to container gateway
