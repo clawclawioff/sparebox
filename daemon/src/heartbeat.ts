@@ -24,6 +24,9 @@ import {
   type IncomingMessage,
   type MessageResponse,
 } from "./message-handler.js";
+import { getFileChanges } from "./file-sync.js";
+import * as path from "node:path";
+import * as os from "node:os";
 import type { DaemonConfig } from "./config.js";
 
 // ---------------------------------------------------------------------------
@@ -53,6 +56,11 @@ export interface HeartbeatPayload {
   remainingResources: { ramMb: number; cpuCores: number; diskGb: number };
   commandAcks: CommandAck[];
   messageResponses: MessageResponse[];
+  fileChanges?: {
+    agentId: string;
+    files: { filename: string; content: string; hash: string }[];
+    deletedFiles?: string[];
+  }[];
 }
 
 export interface HeartbeatResponse {
@@ -178,6 +186,25 @@ export async function sendHeartbeat(
   const allocatedResources = getAllocatedResources();
   const remainingResources = getRemainingResources(totalRamGb, cpuCores);
 
+  // Collect workspace file changes for running agents
+  const fileChanges: HeartbeatPayload["fileChanges"] = [];
+  for (const agentStatus of agentStatuses) {
+    if (agentStatus.status !== "running") continue;
+    const workspaceDir = path.join(os.homedir(), ".sparebox", "agents", agentStatus.agentId, "workspace");
+    try {
+      const { changed, deleted } = getFileChanges(agentStatus.agentId, workspaceDir);
+      if (changed.length > 0 || deleted.length > 0) {
+        fileChanges.push({
+          agentId: agentStatus.agentId,
+          files: changed.map((f) => ({ filename: f.filename, content: f.content, hash: f.hash })),
+          deletedFiles: deleted.length > 0 ? deleted : undefined,
+        });
+      }
+    } catch {
+      // Non-critical — skip file sync for this agent
+    }
+  }
+
   // Drain pending command acks and message responses
   const commandAcks = drainAcks();
   const messageResponses = drainMessageResponses();
@@ -205,6 +232,7 @@ export async function sendHeartbeat(
     remainingResources,
     commandAcks,
     messageResponses,
+    ...(fileChanges.length > 0 ? { fileChanges } : {}),
   };
 
   const url = `${config.apiUrl}/api/hosts/heartbeat`;

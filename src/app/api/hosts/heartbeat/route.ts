@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { z } from "zod";
 import { db } from "@/db";
-import { hostApiKeys, hostHeartbeats, hosts, agentCommands, agents, agentMessages } from "@/db/schema";
+import { hostApiKeys, hostHeartbeats, hosts, agentCommands, agents, agentMessages, agentWorkspaceFiles } from "@/db/schema";
 import { eq, and, isNull, inArray } from "drizzle-orm";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
@@ -93,6 +93,22 @@ const heartbeatSchema = z.object({
     )
     .default([]),
   // Note: messageResponses removed in Chat V2 - messaging now uses direct HTTP
+  // Workspace file changes synced from container
+  fileChanges: z
+    .array(
+      z.object({
+        agentId: z.string().uuid(),
+        files: z.array(
+          z.object({
+            filename: z.string().min(1).max(255),
+            content: z.string().max(500000),
+            hash: z.string().max(128),
+          })
+        ),
+        deletedFiles: z.array(z.string().max(255)).optional(),
+      })
+    )
+    .optional(),
 });
 
 // =============================================================================
@@ -371,6 +387,74 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         console.error(`[Heartbeat] Failed to process ack ${ack.id}:`, err);
       }
+    }
+  }
+
+  // 8b. Process workspace file changes from containers
+  if (data.fileChanges && data.fileChanges.length > 0) {
+    let syncedCount = 0;
+    for (const agentChanges of data.fileChanges) {
+      try {
+        // Security: verify the agent belongs to this host
+        const agentRecord = await db.query.agents.findFirst({
+          where: and(
+            eq(agents.id, agentChanges.agentId),
+            eq(agents.hostId, keyRecord.hostId)
+          ),
+          columns: { id: true },
+        });
+
+        if (!agentRecord) {
+          console.warn(`[Heartbeat] File sync rejected: agent ${agentChanges.agentId} not on host ${keyRecord.hostId}`);
+          continue;
+        }
+
+        // Upsert changed files
+        for (const file of agentChanges.files) {
+          const existing = await db.query.agentWorkspaceFiles.findFirst({
+            where: and(
+              eq(agentWorkspaceFiles.agentId, agentChanges.agentId),
+              eq(agentWorkspaceFiles.filename, file.filename)
+            ),
+            columns: { id: true },
+          });
+
+          if (existing) {
+            await db
+              .update(agentWorkspaceFiles)
+              .set({ content: file.content, updatedAt: new Date() })
+              .where(eq(agentWorkspaceFiles.id, existing.id));
+          } else {
+            await db.insert(agentWorkspaceFiles).values({
+              agentId: agentChanges.agentId,
+              filename: file.filename,
+              content: file.content,
+            });
+          }
+          syncedCount++;
+        }
+
+        // Delete removed files
+        if (agentChanges.deletedFiles && agentChanges.deletedFiles.length > 0) {
+          for (const filename of agentChanges.deletedFiles) {
+            await db
+              .delete(agentWorkspaceFiles)
+              .where(
+                and(
+                  eq(agentWorkspaceFiles.agentId, agentChanges.agentId),
+                  eq(agentWorkspaceFiles.filename, filename)
+                )
+              );
+          }
+          syncedCount += agentChanges.deletedFiles.length;
+        }
+      } catch (err) {
+        console.error(`[Heartbeat] File sync failed for agent ${agentChanges.agentId}:`, err);
+      }
+    }
+
+    if (syncedCount > 0) {
+      console.log(`[Heartbeat] Synced ${syncedCount} workspace file(s) from host ${keyRecord.hostId}`);
     }
   }
 
