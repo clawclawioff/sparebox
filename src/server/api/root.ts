@@ -11,6 +11,8 @@ import { adminRouter } from "./routers/admin";
 import { secretsRouter } from "./routers/secrets";
 import { logsRouter } from "./routers/logs";
 import { agentSettingsRouter } from "./routers/agentSettings";
+import { agentWorkspaceRouter } from "./routers/agent-workspace";
+import { agentIntegrationsRouter } from "./routers/agent-integrations";
 
 export const appRouter = router({
   hosts: hostsRouter,
@@ -25,6 +27,8 @@ export const appRouter = router({
   secrets: secretsRouter,
   logs: logsRouter,
   agentSettings: agentSettingsRouter,
+  agentWorkspace: agentWorkspaceRouter,
+  agentIntegrations: agentIntegrationsRouter,
 });
 
 export type AppRouter = typeof appRouter;

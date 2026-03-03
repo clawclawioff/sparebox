@@ -22,6 +22,13 @@
       "when": 1770330110633,
       "tag": "0002_add_heartbeats_prefs",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1772498600736,
+      "tag": "0003_agent-workspace-integrations",
+      "breakpoints": true
     }
   ]
 }

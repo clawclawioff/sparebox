@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash, randomBytes } from "crypto";
 import { db } from "@/db";
-import { agents, hostApiKeys, agentSecrets } from "@/db/schema";
+import { agents, hostApiKeys, agentSecrets, agentWorkspaceFiles, agentIntegrations } from "@/db/schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { decrypt, encrypt } from "@/lib/encryption";
 import { API_KEY_PREFIX, TIERS, type TierKey } from "@/lib/constants";
@@ -70,8 +70,20 @@ export async function GET(
     }
   }
 
-  // Parse workspace files
-  const workspaceFiles = (agent.workspaceFiles as Record<string, string>) || {};
+  // Parse workspace files from legacy jsonb column
+  const legacyWorkspaceFiles = (agent.workspaceFiles as Record<string, string>) || {};
+
+  // Read workspace files from dedicated table
+  const dbWorkspaceFiles = await db.query.agentWorkspaceFiles.findMany({
+    where: eq(agentWorkspaceFiles.agentId, agentId),
+  });
+  const tableWorkspaceFiles: Record<string, string> = {};
+  for (const f of dbWorkspaceFiles) {
+    tableWorkspaceFiles[f.filename] = f.content;
+  }
+
+  // Table files take precedence over legacy jsonb
+  const workspaceFiles = { ...legacyWorkspaceFiles, ...tableWorkspaceFiles };
 
   // Parse agent config (OpenClaw config overrides)
   const agentConfig = (agent.config as Record<string, unknown>) || {};
@@ -134,6 +146,24 @@ export async function GET(
       env[secret.key] = decrypt(secret.encryptedValue);
     } catch (err) {
       console.error(`[deploy-config] Failed to decrypt secret ${secret.key} for agent ${agentId}`);
+    }
+  }
+
+  // Read agent integrations and inject enabled credentials as env vars
+  const integrations = await db.query.agentIntegrations.findMany({
+    where: eq(agentIntegrations.agentId, agentId),
+  });
+  for (const integration of integrations) {
+    if (!integration.enabled) continue;
+    try {
+      const creds = JSON.parse(decrypt(integration.credentials)) as Record<string, string>;
+      for (const [key, value] of Object.entries(creds)) {
+        if (typeof value === "string" && value.length > 0) {
+          env[key] = value;
+        }
+      }
+    } catch (err) {
+      console.error(`[deploy-config] Failed to decrypt integration ${integration.integrationId} for agent ${agentId}`);
     }
   }
 

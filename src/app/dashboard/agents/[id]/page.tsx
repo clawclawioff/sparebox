@@ -160,6 +160,14 @@ export default function AgentDetailsPage() {
                     </button>
                   )}
                   <div className="border-t border-border my-1" />
+                  <Link
+                    href={`/dashboard/agents/${agentId}/settings`}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+                    onClick={() => setShowMenu(false)}
+                  >
+                    <Settings className="w-4 h-4" /> Settings
+                  </Link>
+                  <div className="border-t border-border my-1" />
                   <button
                     onClick={() => {
                       if (confirm("Delete this agent? This cannot be undone.")) {
@@ -176,16 +184,12 @@ export default function AgentDetailsPage() {
             )}
           </div>
 
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className={`p-2 rounded-lg transition-colors ${
-              showSettings
-                ? "text-primary bg-primary/10"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent"
-            }`}
+          <Link
+            href={`/dashboard/agents/${agentId}/settings`}
+            className="p-2 rounded-lg transition-colors text-muted-foreground hover:text-foreground hover:bg-accent"
           >
             <Settings className="w-4 h-4" />
-          </button>
+          </Link>
         </div>
       </div>
 

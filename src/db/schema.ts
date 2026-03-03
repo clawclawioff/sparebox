@@ -361,6 +361,27 @@ export const agentLogs = pgTable("agent_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Agent Workspace Files (editable workspace files like SOUL.md, USER.md, etc.)
+export const agentWorkspaceFiles = pgTable("agent_workspace_files", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  agentId: uuid("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  filename: text("filename").notNull(),
+  content: text("content").notNull().default(""),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Agent Integrations (encrypted integration credentials)
+export const agentIntegrations = pgTable("agent_integrations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  agentId: uuid("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  integrationId: text("integration_id").notNull(),
+  enabled: boolean("enabled").default(true).notNull(),
+  credentials: text("credentials").notNull(), // AES-256-GCM encrypted JSON
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // ============================================
 // RELATIONS
 // ============================================
@@ -398,6 +419,8 @@ export const agentsRelations = relations(agents, ({ one, many }) => ({
   messages: many(agentMessages),
   secrets: many(agentSecrets),
   logs: many(agentLogs),
+  workspaceFiles: many(agentWorkspaceFiles),
+  integrations: many(agentIntegrations),
 }));
 
 export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
@@ -437,4 +460,12 @@ export const agentSecretsRelations = relations(agentSecrets, ({ one }) => ({
 
 export const agentLogsRelations = relations(agentLogs, ({ one }) => ({
   agent: one(agents, { fields: [agentLogs.agentId], references: [agents.id] }),
+}));
+
+export const agentWorkspaceFilesRelations = relations(agentWorkspaceFiles, ({ one }) => ({
+  agent: one(agents, { fields: [agentWorkspaceFiles.agentId], references: [agents.id] }),
+}));
+
+export const agentIntegrationsRelations = relations(agentIntegrations, ({ one }) => ({
+  agent: one(agents, { fields: [agentIntegrations.agentId], references: [agents.id] }),
 }));
