@@ -251,8 +251,8 @@ export async function GET(
         model: {
           primary: modelPrimary,
         },
-        // Workspace is mounted at /workspace in the container
-        workspace: "/workspace",
+        // Workspace is mounted at ~/.openclaw/workspace via Docker volume
+        // No need to override — OpenClaw uses this path by default
       },
     },
   };
@@ -267,14 +267,14 @@ You are running inside a Sparebox container. Some features work differently here
 ## Tool Availability
 
 ### ✅ Works normally
-- **Read/Write/Edit** — Files at /workspace (your workspace directory)
+- **Read/Write/Edit** — Files at ~/.openclaw/workspace (your workspace directory)
 - **web_fetch** — Fetch and extract content from URLs
 - **cron** — Schedule jobs (see Cron section below)
 - **gateway** — Config management
 - **exec** — Shell commands (limited, see below)
 
 ### ⚠️ Limited
-- **exec/shell** — Read-only filesystem. You CANNOT install packages, use sudo, or write outside /workspace and /tmp. Basic shell commands, scripts, and file operations work fine.
+- **exec/shell** — Full shell access. You CAN install packages (apt, pip, npm), write anywhere in the container, and run scripts. Resource limits (RAM, CPU, disk) are enforced by the container.
 - **web_search** — Only available if the deployer's plan includes it.
 - **image** — Vision/image analysis works if your LLM model supports it (GPT-5-mini and Claude Sonnet do).
 - **sessions_spawn/subagents** — Works but shares the container's resource limits.
@@ -314,7 +314,7 @@ The user will see the result when they next send a chat message.
 - Do NOT try to pair or connect messaging channels.
 
 ## File System
-- **Workspace:** /workspace (persistent, read-write)
+- **Workspace: ~/.openclaw/workspace (persistent, read-write)
 - **Temp files:** /tmp (tmpfs, cleared on restart, 256MB limit)
 - **Agent state:** /home/node/.openclaw (tmpfs, 128MB limit)
 - **Everything else:** Read-only. Do not attempt to write outside these directories.

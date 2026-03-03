@@ -320,13 +320,24 @@ async function handleDeploy(cmd: Command): Promise<CommandAck> {
         }
       }
 
-      // 3. Write OpenClaw config to state directory
+      // 3. Write OpenClaw config to state directory AND to where OpenClaw reads it
       if (configData.openclawConfig && typeof configData.openclawConfig === "object") {
+        const configJson = JSON.stringify(configData.openclawConfig, null, 2);
+        // Persist in state dir for reference
         fs.writeFileSync(
           path.join(stateDir, "openclaw-config.json"),
-          JSON.stringify(configData.openclawConfig, null, 2),
+          configJson,
           "utf-8"
         );
+        // Also write as openclaw.json in the parent of workspace dir
+        // (workspace mounts at ~/.openclaw/workspace, so parent is ~/.openclaw/)
+        const openclawDir = path.dirname(workspaceDir);
+        fs.writeFileSync(
+          path.join(openclawDir, "openclaw.json"),
+          configJson,
+          "utf-8"
+        );
+        log("INFO", `Wrote openclaw.json to ${openclawDir}`);
       }
 
       // 4. Write full deploy config for reference
@@ -624,11 +635,19 @@ async function handleUpdateConfig(cmd: Command): Promise<CommandAck> {
         }
       }
 
-      // Update openclaw config
+      // Update openclaw config — both state dir and where OpenClaw reads it
       if (configData.openclawConfig && typeof configData.openclawConfig === "object") {
+        const configJson = JSON.stringify(configData.openclawConfig, null, 2);
         fs.writeFileSync(
           path.join(stateDir, "openclaw-config.json"),
-          JSON.stringify(configData.openclawConfig, null, 2),
+          configJson,
+          "utf-8"
+        );
+        // Write to parent of workspace (= ~/.openclaw/ inside container)
+        const openclawDir = path.dirname(workspaceDir);
+        fs.writeFileSync(
+          path.join(openclawDir, "openclaw.json"),
+          configJson,
           "utf-8"
         );
       }

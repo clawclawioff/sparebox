@@ -149,7 +149,9 @@ export async function createContainer(opts: ContainerCreateOpts): Promise<string
     "--network", opts.network ?? "bridge",
     "-p", `${opts.port}:3000`,
     // Volume mounts — workspace and state
-    "-v", `${opts.workspaceDir}:/workspace`,
+    // OpenClaw reads config from ~/.openclaw/openclaw.json and workspace from ~/.openclaw/workspace
+    // In the node:22 image, HOME=/home/node. Mount directly to where OpenClaw expects them.
+    "-v", `${opts.workspaceDir}:/home/node/.openclaw/workspace`,
     "-v", `${opts.stateDir}:/state`,
     // Tmpfs for /tmp (nosuid but no noexec so scripts work)
     "--tmpfs", "/tmp:rw,nosuid,size=512m",
