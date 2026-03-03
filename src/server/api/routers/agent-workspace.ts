@@ -82,7 +82,7 @@ async function queueConfigUpdate(ctx: { db: typeof db }, agentId: string, hostId
       agentId,
       hostId,
       type: "update_config",
-      payload: { reason },
+      payload: { reason, configUrl: `/api/agents/${agentId}/deploy-config` },
       status: "pending",
     });
   }

@@ -109,7 +109,7 @@ export const agentIntegrationsRouter = router({
           agentId: input.agentId,
           hostId: agent.hostId,
           type: "update_config",
-          payload: { reason: "integration_updated", integrationId: input.integrationId },
+          payload: { reason: "integration_updated", integrationId: input.integrationId, configUrl: `/api/agents/${input.agentId}/deploy-config` },
           status: "pending",
         });
       }
@@ -128,7 +128,7 @@ export const agentIntegrationsRouter = router({
           agentId: input.agentId,
           hostId: agent.hostId,
           type: "update_config",
-          payload: { reason: "integration_deleted", integrationId: input.integrationId },
+          payload: { reason: "integration_deleted", integrationId: input.integrationId, configUrl: `/api/agents/${input.agentId}/deploy-config` },
           status: "pending",
         });
       }

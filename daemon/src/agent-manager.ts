@@ -600,8 +600,9 @@ async function handleUpdateConfig(cmd: Command): Promise<CommandAck> {
   try {
     // Fetch new config
     let newEnv: Record<string, string> = {};
+    let configData: DeployConfig | null = null;
     if (cmd.payload.configUrl && daemonConfig) {
-      const configData = await fetchConfig(cmd.payload.configUrl, daemonConfig);
+      configData = await fetchConfig(cmd.payload.configUrl, daemonConfig);
       const stateDir = path.join(AGENTS_DIR, cmd.agentId, "state");
       const workspaceDir = path.join(AGENTS_DIR, cmd.agentId, "workspace");
       ensureDir(stateDir);
@@ -639,21 +640,28 @@ async function handleUpdateConfig(cmd: Command): Promise<CommandAck> {
       );
     }
 
-    // Restart the agent to pick up new config
-    if (agent.isolation === "docker" && agent.containerId) {
-      await stopContainer(agent.containerId);
-      await startContainer(agent.containerId);
-    } else if (agent.isolation === "profile") {
-      await stopProfile(agent.profile);
-      await sleep(1000);
-      const pid = await startProfile(agent.profile, agent.port, newEnv);
-      agent.pid = pid;
+    // Only restart if env vars or openclaw config changed.
+    // Workspace file changes are picked up live via volume mount — no restart needed.
+    const needsRestart = Object.keys(newEnv).length > 0 ||
+      (cmd.payload.configUrl && configData?.openclawConfig);
+
+    if (needsRestart) {
+      if (agent.isolation === "docker" && agent.containerId) {
+        await stopContainer(agent.containerId);
+        await startContainer(agent.containerId);
+      } else if (agent.isolation === "profile") {
+        await stopProfile(agent.profile);
+        await sleep(1000);
+        const pid = await startProfile(agent.profile, agent.port, newEnv);
+        agent.pid = pid;
+      }
+      log("INFO", `Agent ${cmd.agentId} config updated and restarted`);
+    } else {
+      log("INFO", `Agent ${cmd.agentId} workspace files updated (no restart needed)`);
     }
 
     agent.status = "running";
     saveAgents();
-
-    log("INFO", `Agent ${cmd.agentId} config updated and restarted`);
     return { id: cmd.id, status: "acked", containerId: agent.containerId ?? `pid:${agent.pid}` };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
