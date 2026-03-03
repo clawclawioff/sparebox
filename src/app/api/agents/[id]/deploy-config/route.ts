@@ -106,10 +106,16 @@ export async function GET(
   }
 
   // Set model: explicit llmModel > config model > provider default
+  // Ensure model always has provider prefix (OpenClaw requires "provider/model" format)
+  const ensureProviderPrefix = (model: string, provider: string): string => {
+    if (model.includes("/")) return model; // already prefixed
+    return `${provider}/${model}`;
+  };
+
   if (agent.llmModel) {
-    env.OPENCLAW_MODEL = agent.llmModel;
+    env.OPENCLAW_MODEL = ensureProviderPrefix(agent.llmModel, effectiveProvider);
   } else if (agentConfig.model && typeof agentConfig.model === "string") {
-    env.OPENCLAW_MODEL = agentConfig.model;
+    env.OPENCLAW_MODEL = ensureProviderPrefix(agentConfig.model, effectiveProvider);
   } else {
     env.OPENCLAW_MODEL = providerDefaultModel[effectiveProvider] || "anthropic/claude-sonnet-4-6";
   }
