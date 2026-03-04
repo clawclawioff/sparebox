@@ -13,6 +13,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import * as https from "node:https";
+import { execFileSync } from "node:child_process";
 import * as http from "node:http";
 import { URL } from "node:url";
 import { log } from "./log.js";
@@ -300,6 +301,23 @@ async function handleDeploy(cmd: Command): Promise<CommandAck> {
   ensureDir(workspaceDir);
   ensureDir(stateDir);
 
+  // Pre-create subdirs that OpenClaw expects inside ~/.openclaw/
+  // and set ownership to UID 1000 (node user in container).
+  // Without this, the bind-mounted dir is owned by the host user
+  // and the container's node user gets EACCES on mkdir.
+  const openclawSubdirs = ["workspace", "workspace/memory", "canvas", "cron", "credentials"];
+  for (const sub of openclawSubdirs) {
+    ensureDir(path.join(agentDir, sub));
+  }
+  try {
+    // Recursively chown to UID/GID 1000 (node user in node:22 image)
+    execFileSync("chown", ["-R", "1000:1000", agentDir], { timeout: 5000 });
+    log("INFO", `Set ownership of ${agentDir} to 1000:1000`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log("WARN", `Failed to chown agent dir (container may have permission issues): ${msg}`);
+  }
+
   // Fetch deploy config if configUrl provided
   // Force OpenClaw to use ~/.openclaw as its state/config dir (not /state)
   // This ensures config, workspace, and state all live under the single bind mount
@@ -361,6 +379,13 @@ async function handleDeploy(cmd: Command): Promise<CommandAck> {
       const msg = err instanceof Error ? err.message : String(err);
       log("WARN", `Failed to fetch deploy config for ${agentId}: ${msg}`);
     }
+  }
+
+  // Re-chown after all file writes (config, workspace files written as host user)
+  try {
+    execFileSync("chown", ["-R", "1000:1000", agentDir], { timeout: 5000 });
+  } catch {
+    // Already warned above
   }
 
   // Deploy based on isolation mode
@@ -665,6 +690,14 @@ async function handleUpdateConfig(cmd: Command): Promise<CommandAck> {
         JSON.stringify(configData, null, 2),
         "utf-8"
       );
+    }
+
+    // Re-chown after file writes so container's node user can read them
+    const updateAgentDir = path.join(AGENTS_DIR, cmd.agentId);
+    try {
+      execFileSync("chown", ["-R", "1000:1000", updateAgentDir], { timeout: 5000 });
+    } catch {
+      // Non-critical
     }
 
     // Only restart if env vars or openclaw config changed.
