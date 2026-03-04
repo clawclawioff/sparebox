@@ -91,18 +91,21 @@ export async function createContainer(opts) {
         // Resource limits
         "--memory", `${opts.ramMb}m`,
         "--cpus", `${opts.cpuCores}`,
-        // Security hardening
-        "--read-only",
+        "--pids-limit=256",
+        "--ulimit", "nofile=65536:65536",
+        // TODO: --storage-opt size=XG requires overlay2+xfs backing filesystem, skip for now
+        // Security hardening (writable rootfs so agents can apt/pip/npm install)
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
         // Networking
         "--network", opts.network ?? "bridge",
         "-p", `${opts.port}:3000`,
-        // Volume mounts — workspace and state
-        "-v", `${opts.workspaceDir}:/workspace`,
-        "-v", `${opts.stateDir}:/state`,
-        // Tmpfs for /tmp so read-only rootfs still works
-        "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m",
+        // Volume mount — entire .openclaw directory
+        // OpenClaw reads config from ~/.openclaw/openclaw.json and workspace from ~/.openclaw/workspace
+        // In the node:22 image, HOME=/home/node. Mount the whole dir so both config and workspace are accessible.
+        "-v", `${opts.openclawDir}:/home/node/.openclaw`,
+        // Tmpfs for /tmp (nosuid but no noexec so scripts work)
+        "--tmpfs", "/tmp:rw,nosuid,size=512m",
     ];
     // Environment variables
     for (const [key, value] of Object.entries(opts.env)) {

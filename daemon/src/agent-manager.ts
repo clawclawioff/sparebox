@@ -291,13 +291,22 @@ async function handleDeploy(cmd: Command): Promise<CommandAck> {
   const port = allocatePort();
 
   // Create agent directories
-  const workspaceDir = path.join(AGENTS_DIR, agentId, "workspace");
-  const stateDir = path.join(AGENTS_DIR, agentId, "state");
+  // The entire agents/{id}/ dir is mounted as /home/node/.openclaw inside the container.
+  // This means agents/{id}/workspace → /home/node/.openclaw/workspace
+  // and agents/{id}/openclaw.json → /home/node/.openclaw/openclaw.json
+  const agentDir = path.join(AGENTS_DIR, agentId);
+  const workspaceDir = path.join(agentDir, "workspace");
+  const stateDir = path.join(agentDir, "state");
   ensureDir(workspaceDir);
   ensureDir(stateDir);
 
   // Fetch deploy config if configUrl provided
-  let agentEnv: Record<string, string> = { ...(payload.env ?? {}) };
+  // Force OpenClaw to use ~/.openclaw as its state/config dir (not /state)
+  // This ensures config, workspace, and state all live under the single bind mount
+  let agentEnv: Record<string, string> = {
+    OPENCLAW_STATE_DIR: "/home/node/.openclaw",
+    ...(payload.env ?? {}),
+  };
   if (payload.configUrl && daemonConfig) {
     try {
       const configData = await fetchConfig(payload.configUrl, daemonConfig);

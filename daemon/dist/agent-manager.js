@@ -97,6 +97,37 @@ export function getAgentRecordsForMessaging() {
     return result;
 }
 // ---------------------------------------------------------------------------
+// Resource tracking
+// ---------------------------------------------------------------------------
+const RESERVED_RAM_MB = 1024; // 1GB for host OS + daemon
+const RESERVED_CPU_CORES = 1;
+/**
+ * Sum of resources allocated to all deployed agents.
+ */
+export function getAllocatedResources() {
+    let ramMb = 0;
+    let cpuCores = 0;
+    let diskGb = 0;
+    for (const agent of agents.values()) {
+        ramMb += agent.resources.ramMb;
+        cpuCores += agent.resources.cpuCores;
+        diskGb += agent.resources.diskGb;
+    }
+    return { ramMb, cpuCores, diskGb };
+}
+/**
+ * Remaining resources available for new agents.
+ */
+export function getRemainingResources(totalRamGb, cpuCores) {
+    const allocated = getAllocatedResources();
+    const totalRamMb = totalRamGb * 1024;
+    return {
+        ramMb: Math.max(0, totalRamMb - RESERVED_RAM_MB - allocated.ramMb),
+        cpuCores: Math.max(0, cpuCores - RESERVED_CPU_CORES - allocated.cpuCores),
+        diskGb: Math.max(0, 0 - allocated.diskGb), // disk total not passed here; platform knows total from heartbeat
+    };
+}
+// ---------------------------------------------------------------------------
 // Command processing
 // ---------------------------------------------------------------------------
 /**
@@ -157,12 +188,21 @@ async function handleDeploy(cmd) {
     // Allocate port
     const port = allocatePort();
     // Create agent directories
-    const workspaceDir = path.join(AGENTS_DIR, agentId, "workspace");
-    const stateDir = path.join(AGENTS_DIR, agentId, "state");
+    // The entire agents/{id}/ dir is mounted as /home/node/.openclaw inside the container.
+    // This means agents/{id}/workspace → /home/node/.openclaw/workspace
+    // and agents/{id}/openclaw.json → /home/node/.openclaw/openclaw.json
+    const agentDir = path.join(AGENTS_DIR, agentId);
+    const workspaceDir = path.join(agentDir, "workspace");
+    const stateDir = path.join(agentDir, "state");
     ensureDir(workspaceDir);
     ensureDir(stateDir);
     // Fetch deploy config if configUrl provided
-    let agentEnv = { ...(payload.env ?? {}) };
+    // Force OpenClaw to use ~/.openclaw as its state/config dir (not /state)
+    // This ensures config, workspace, and state all live under the single bind mount
+    let agentEnv = {
+        OPENCLAW_STATE_DIR: "/home/node/.openclaw",
+        ...(payload.env ?? {}),
+    };
     if (payload.configUrl && daemonConfig) {
         try {
             const configData = await fetchConfig(payload.configUrl, daemonConfig);
@@ -182,9 +222,16 @@ async function handleDeploy(cmd) {
                     }
                 }
             }
-            // 3. Write OpenClaw config to state directory
+            // 3. Write OpenClaw config to state directory AND to where OpenClaw reads it
             if (configData.openclawConfig && typeof configData.openclawConfig === "object") {
-                fs.writeFileSync(path.join(stateDir, "openclaw-config.json"), JSON.stringify(configData.openclawConfig, null, 2), "utf-8");
+                const configJson = JSON.stringify(configData.openclawConfig, null, 2);
+                // Persist in state dir for reference
+                fs.writeFileSync(path.join(stateDir, "openclaw-config.json"), configJson, "utf-8");
+                // Also write as openclaw.json in the parent of workspace dir
+                // (workspace mounts at ~/.openclaw/workspace, so parent is ~/.openclaw/)
+                const openclawDir = path.dirname(workspaceDir);
+                fs.writeFileSync(path.join(openclawDir, "openclaw.json"), configJson, "utf-8");
+                log("INFO", `Wrote openclaw.json to ${openclawDir}`);
             }
             // 4. Write full deploy config for reference
             fs.writeFileSync(path.join(stateDir, "deploy-config.json"), JSON.stringify(configData, null, 2), "utf-8");
@@ -199,20 +246,25 @@ async function handleDeploy(cmd) {
     let containerId = null;
     let pid = null;
     if (isolationMode === "docker") {
-        // Pull image first
+        // Stage: pulling
+        queueAcks([{ id, status: "acked", stage: "pulling", progress: 0 }]);
         await pullImage(image);
+        // Stage: creating
+        queueAcks([{ id, status: "acked", stage: "creating" }]);
         containerId = await createContainer({
             name: profile,
             image,
             ramMb: resources.ramMb,
             cpuCores: resources.cpuCores,
             port,
-            workspaceDir,
-            stateDir,
+            openclawDir: path.join(AGENTS_DIR, agentId),
             env: agentEnv,
         });
+        // Stage: starting
+        queueAcks([{ id, status: "acked", stage: "starting", containerId }]);
         // Wait for container to be running
         let healthy = false;
+        queueAcks([{ id, status: "acked", stage: "health_check", containerId }]);
         for (let i = 0; i < 10; i++) {
             await sleep(1000);
             if (await isContainerRunning(containerId)) {
@@ -265,7 +317,7 @@ async function handleDeploy(cmd) {
                     agents: {
                         defaults: {
                             model: {
-                                primary: isOpenAI ? "openai/gpt-4o" : "anthropic/claude-sonnet-4-20250514",
+                                primary: isOpenAI ? "openai/gpt-5-mini" : "anthropic/claude-sonnet-4-6",
                             },
                         },
                     },
@@ -299,7 +351,7 @@ async function handleDeploy(cmd) {
     agents.set(agentId, record);
     saveAgents();
     log("INFO", `Agent ${agentId} deployed: ${containerId ?? `pid:${pid}`} on port ${port}`);
-    return { id, status: "acked", containerId: containerId ?? `pid:${pid}` };
+    return { id, status: "acked", containerId: containerId ?? `pid:${pid}`, stage: "ready" };
 }
 async function handleStart(cmd) {
     const agent = agents.get(cmd.agentId);
@@ -414,8 +466,9 @@ async function handleUpdateConfig(cmd) {
     try {
         // Fetch new config
         let newEnv = {};
+        let configData = null;
         if (cmd.payload.configUrl && daemonConfig) {
-            const configData = await fetchConfig(cmd.payload.configUrl, daemonConfig);
+            configData = await fetchConfig(cmd.payload.configUrl, daemonConfig);
             const stateDir = path.join(AGENTS_DIR, cmd.agentId, "state");
             const workspaceDir = path.join(AGENTS_DIR, cmd.agentId, "workspace");
             ensureDir(stateDir);
@@ -434,26 +487,38 @@ async function handleUpdateConfig(cmd) {
                     }
                 }
             }
-            // Update openclaw config
+            // Update openclaw config — both state dir and where OpenClaw reads it
             if (configData.openclawConfig && typeof configData.openclawConfig === "object") {
-                fs.writeFileSync(path.join(stateDir, "openclaw-config.json"), JSON.stringify(configData.openclawConfig, null, 2), "utf-8");
+                const configJson = JSON.stringify(configData.openclawConfig, null, 2);
+                fs.writeFileSync(path.join(stateDir, "openclaw-config.json"), configJson, "utf-8");
+                // Write to parent of workspace (= ~/.openclaw/ inside container)
+                const openclawDir = path.dirname(workspaceDir);
+                fs.writeFileSync(path.join(openclawDir, "openclaw.json"), configJson, "utf-8");
             }
             fs.writeFileSync(path.join(stateDir, "deploy-config.json"), JSON.stringify(configData, null, 2), "utf-8");
         }
-        // Restart the agent to pick up new config
-        if (agent.isolation === "docker" && agent.containerId) {
-            await stopContainer(agent.containerId);
-            await startContainer(agent.containerId);
+        // Only restart if env vars or openclaw config changed.
+        // Workspace file changes are picked up live via volume mount — no restart needed.
+        const needsRestart = Object.keys(newEnv).length > 0 ||
+            (cmd.payload.configUrl && configData?.openclawConfig);
+        if (needsRestart) {
+            if (agent.isolation === "docker" && agent.containerId) {
+                await stopContainer(agent.containerId);
+                await startContainer(agent.containerId);
+            }
+            else if (agent.isolation === "profile") {
+                await stopProfile(agent.profile);
+                await sleep(1000);
+                const pid = await startProfile(agent.profile, agent.port, newEnv);
+                agent.pid = pid;
+            }
+            log("INFO", `Agent ${cmd.agentId} config updated and restarted`);
         }
-        else if (agent.isolation === "profile") {
-            await stopProfile(agent.profile);
-            await sleep(1000);
-            const pid = await startProfile(agent.profile, agent.port, newEnv);
-            agent.pid = pid;
+        else {
+            log("INFO", `Agent ${cmd.agentId} workspace files updated (no restart needed)`);
         }
         agent.status = "running";
         saveAgents();
-        log("INFO", `Agent ${cmd.agentId} config updated and restarted`);
         return { id: cmd.id, status: "acked", containerId: agent.containerId ?? `pid:${agent.pid}` };
     }
     catch (err) {

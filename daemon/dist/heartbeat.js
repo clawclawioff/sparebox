@@ -2,9 +2,12 @@ import * as https from "node:https";
 import * as http from "node:http";
 import { URL } from "node:url";
 import { log } from "./log.js";
-import { getCpuUsage, getRamUsage, getDiskUsage, getOsInfo, getTotalRamGb, getTotalDiskGb, getCpuCores, getCpuModel } from "./metrics.js";
-import { processCommands, queueAcks, drainAcks, getAgentStatuses, getAgentCount, getIsolationMode, getAgentRecordsForMessaging, } from "./agent-manager.js";
+import { getCpuUsage, getRamUsage, getDiskUsage, getOsInfo, getTotalRamGb, getTotalDiskGb, getCpuCores, getCpuModel, getGpuInfo } from "./metrics.js";
+import { processCommands, queueAcks, drainAcks, getAgentStatuses, getAgentCount, getIsolationMode, getAgentRecordsForMessaging, getAllocatedResources, getRemainingResources, } from "./agent-manager.js";
 import { processMessages, drainMessageResponses, queueMessageResponses, } from "./message-handler.js";
+import { getFileChanges } from "./file-sync.js";
+import * as path from "node:path";
+import * as os from "node:os";
 // ---------------------------------------------------------------------------
 // Backoff state
 // ---------------------------------------------------------------------------
@@ -81,13 +84,38 @@ function request(url, options, body) {
 const startTime = Date.now();
 export async function sendHeartbeat(config, daemonVersion) {
     // Collect metrics (CPU sampling takes ~1s)
-    const [cpuUsage, diskUsage, totalDiskGb, agentStatuses] = await Promise.all([
+    const [cpuUsage, diskUsage, totalDiskGb, agentStatuses, gpuInfo] = await Promise.all([
         getCpuUsage(),
         getDiskUsage(),
         getTotalDiskGb(),
         getAgentStatuses(),
+        getGpuInfo(),
     ]);
     const ramUsage = getRamUsage();
+    const totalRamGb = getTotalRamGb();
+    const cpuCores = getCpuCores();
+    const allocatedResources = getAllocatedResources();
+    const remainingResources = getRemainingResources(totalRamGb, cpuCores);
+    // Collect workspace file changes for running agents
+    const fileChanges = [];
+    for (const agentStatus of agentStatuses) {
+        if (agentStatus.status !== "running")
+            continue;
+        const workspaceDir = path.join(os.homedir(), ".sparebox", "agents", agentStatus.agentId, "workspace");
+        try {
+            const { changed, deleted } = getFileChanges(agentStatus.agentId, workspaceDir);
+            if (changed.length > 0 || deleted.length > 0) {
+                fileChanges.push({
+                    agentId: agentStatus.agentId,
+                    files: changed.map((f) => ({ filename: f.filename, content: f.content, hash: f.hash })),
+                    deletedFiles: deleted.length > 0 ? deleted : undefined,
+                });
+            }
+        }
+        catch {
+            // Non-critical — skip file sync for this agent
+        }
+    }
     // Drain pending command acks and message responses
     const commandAcks = drainAcks();
     const messageResponses = drainMessageResponses();
@@ -101,14 +129,20 @@ export async function sendHeartbeat(config, daemonVersion) {
         osInfo: getOsInfo(),
         nodeVersion: process.version,
         uptime: Math.round((Date.now() - startTime) / 1000),
-        totalRamGb: getTotalRamGb(),
+        totalRamGb,
         totalDiskGb: totalDiskGb >= 0 ? totalDiskGb : 0,
-        cpuCores: getCpuCores(),
+        cpuCores,
         cpuModel: getCpuModel(),
         isolationMode: getIsolationMode(),
         openclawVersion,
+        gpuModel: gpuInfo.model,
+        gpuVramGb: gpuInfo.vramGb,
+        gpuUsage: gpuInfo.usage,
+        allocatedResources,
+        remainingResources,
         commandAcks,
         messageResponses,
+        ...(fileChanges.length > 0 ? { fileChanges } : {}),
     };
     const url = `${config.apiUrl}/api/hosts/heartbeat`;
     const body = JSON.stringify(payload);
