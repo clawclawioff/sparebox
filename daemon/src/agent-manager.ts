@@ -373,8 +373,7 @@ async function handleDeploy(cmd: Command): Promise<CommandAck> {
       ramMb: resources.ramMb,
       cpuCores: resources.cpuCores,
       port,
-      workspaceDir,
-      stateDir,
+      openclawDir: path.join(AGENTS_DIR, agentId),
       env: agentEnv,
     });
 

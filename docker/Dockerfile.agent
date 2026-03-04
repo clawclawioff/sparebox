@@ -8,8 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install OpenClaw globally
 RUN npm install -g openclaw
 
-# Create workspace and state directories
-RUN mkdir -p /workspace /state
+# Create OpenClaw directories (will be overridden by volume mount,
+# but ensures they exist if no mount is provided)
+RUN mkdir -p /home/node/.openclaw/workspace && chown -R node:node /home/node/.openclaw
 
 ENV NODE_ENV=production
 
@@ -19,7 +20,7 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:3000/health || exit 1
 
-# Entrypoint script that wires config + workspace before starting OpenClaw
+# Entrypoint script
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

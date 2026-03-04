@@ -314,10 +314,11 @@ The user will see the result when they next send a chat message.
 - Do NOT try to pair or connect messaging channels.
 
 ## File System
-- **Workspace: ~/.openclaw/workspace (persistent, read-write)
-- **Temp files:** /tmp (tmpfs, cleared on restart, 256MB limit)
-- **Agent state:** /home/node/.openclaw (tmpfs, 128MB limit)
-- **Everything else:** Read-only. Do not attempt to write outside these directories.
+- **OpenClaw home:** /home/node/.openclaw (persistent, bind-mounted from host)
+- **Workspace:** /home/node/.openclaw/workspace (persistent, read-write — synced bidirectionally with Sparebox dashboard)
+- **Config:** /home/node/.openclaw/openclaw.json (managed by daemon)
+- **Temp files:** /tmp (tmpfs, cleared on restart, 512MB limit)
+- **Everything else:** Writable (you can apt/pip/npm install freely). Resource limits (RAM, CPU) are enforced by the container.
 
 ## Environment
 - Agent ID: ${agentId}
