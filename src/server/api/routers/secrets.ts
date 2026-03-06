@@ -100,14 +100,18 @@ export const secretsRouter = router({
         });
       }
 
-      // If agent is running, trigger config update so new env vars take effect
-      if (agent.hostId && agent.status === "running") {
+      // If agent is active/deploying, trigger config update so new env vars take effect
+      if (agent.hostId && (agent.status === "running" || agent.status === "deploying")) {
         const { agentCommands } = await import("@/db/schema");
         await ctx.db.insert(agentCommands).values({
           agentId: input.agentId,
           hostId: agent.hostId,
           type: "update_config",
-          payload: { reason: "secret_updated", key: input.key },
+          payload: {
+            reason: "secret_updated",
+            key: input.key,
+            configUrl: `/api/agents/${input.agentId}/deploy-config`,
+          },
           status: "pending",
         });
       }
@@ -136,14 +140,18 @@ export const secretsRouter = router({
           eq(agentSecrets.key, input.key),
         ));
 
-      // Trigger config update if running
-      if (agent.hostId && agent.status === "running") {
+      // Trigger config update if active/deploying
+      if (agent.hostId && (agent.status === "running" || agent.status === "deploying")) {
         const { agentCommands } = await import("@/db/schema");
         await ctx.db.insert(agentCommands).values({
           agentId: input.agentId,
           hostId: agent.hostId,
           type: "update_config",
-          payload: { reason: "secret_deleted", key: input.key },
+          payload: {
+            reason: "secret_deleted",
+            key: input.key,
+            configUrl: `/api/agents/${input.agentId}/deploy-config`,
+          },
           status: "pending",
         });
       }

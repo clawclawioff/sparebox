@@ -63,11 +63,11 @@ export interface Command {
 
 export interface CommandAck {
   id: string;
-  status: "acked" | "error";
+  status: "acked" | "failed";
   containerId?: string;
   error?: string;
-  stage?: "pulling" | "creating" | "starting" | "health_check" | "ready";
-  progress?: number;
+  deployStage?: "pulling" | "creating" | "starting" | "health_check" | "ready";
+  deployProgress?: number;
 }
 
 export interface AgentRecord {
@@ -241,7 +241,7 @@ export async function processCommands(commands: Command[]): Promise<CommandAck[]
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log("ERROR", `Command ${cmd.id} (${cmd.type}) failed: ${msg}`);
-      acks.push({ id: cmd.id, status: "error", error: msg });
+      acks.push({ id: cmd.id, status: "failed", error: msg });
     }
   }
 
@@ -263,7 +263,7 @@ async function processCommand(cmd: Command): Promise<CommandAck> {
     case "update_config":
       return handleUpdateConfig(cmd);
     default:
-      return { id: cmd.id, status: "error", error: `Unknown command type: ${(cmd as Command).type}` };
+      return { id: cmd.id, status: "failed", error: `Unknown command type: ${(cmd as Command).type}` };
   }
 }
 
@@ -394,12 +394,12 @@ async function handleDeploy(cmd: Command): Promise<CommandAck> {
 
   if (isolationMode === "docker") {
     // Stage: pulling
-    queueAcks([{ id, status: "acked", stage: "pulling", progress: 0 }]);
+    queueAcks([{ id, status: "acked", deployStage: "pulling", deployProgress: 0 }]);
 
     await pullImage(image);
 
     // Stage: creating
-    queueAcks([{ id, status: "acked", stage: "creating" }]);
+    queueAcks([{ id, status: "acked", deployStage: "creating" }]);
 
     containerId = await createContainer({
       name: profile,
@@ -412,11 +412,11 @@ async function handleDeploy(cmd: Command): Promise<CommandAck> {
     });
 
     // Stage: starting
-    queueAcks([{ id, status: "acked", stage: "starting", containerId }]);
+    queueAcks([{ id, status: "acked", deployStage: "starting", containerId }]);
 
     // Wait for container to be running
     let healthy = false;
-    queueAcks([{ id, status: "acked", stage: "health_check", containerId }]);
+    queueAcks([{ id, status: "acked", deployStage: "health_check", containerId }]);
     for (let i = 0; i < 10; i++) {
       await sleep(1000);
       if (await isContainerRunning(containerId)) {
@@ -498,7 +498,7 @@ async function handleDeploy(cmd: Command): Promise<CommandAck> {
 
     pid = await startProfile(profile, port, agentEnv);
   } else {
-    return { id, status: "error", error: "No isolation runtime available" };
+    return { id, status: "failed", error: "No isolation runtime available" };
   }
 
   // Record the agent
@@ -519,13 +519,13 @@ async function handleDeploy(cmd: Command): Promise<CommandAck> {
   saveAgents();
 
   log("INFO", `Agent ${agentId} deployed: ${containerId ?? `pid:${pid}`} on port ${port}`);
-  return { id, status: "acked", containerId: containerId ?? `pid:${pid}`, stage: "ready" };
+  return { id, status: "acked", containerId: containerId ?? `pid:${pid}`, deployStage: "ready", deployProgress: 100 };
 }
 
 async function handleStart(cmd: Command): Promise<CommandAck> {
   const agent = agents.get(cmd.agentId);
   if (!agent) {
-    return { id: cmd.id, status: "error", error: `Agent ${cmd.agentId} not found` };
+    return { id: cmd.id, status: "failed", error: `Agent ${cmd.agentId} not found` };
   }
 
   try {
@@ -544,14 +544,14 @@ async function handleStart(cmd: Command): Promise<CommandAck> {
     const msg = err instanceof Error ? err.message : String(err);
     agent.status = "error";
     saveAgents();
-    return { id: cmd.id, status: "error", error: msg };
+    return { id: cmd.id, status: "failed", error: msg };
   }
 }
 
 async function handleStop(cmd: Command): Promise<CommandAck> {
   const agent = agents.get(cmd.agentId);
   if (!agent) {
-    return { id: cmd.id, status: "error", error: `Agent ${cmd.agentId} not found` };
+    return { id: cmd.id, status: "failed", error: `Agent ${cmd.agentId} not found` };
   }
 
   try {
@@ -567,14 +567,14 @@ async function handleStop(cmd: Command): Promise<CommandAck> {
     return { id: cmd.id, status: "acked", containerId: agent.containerId ?? `pid:${agent.pid}` };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { id: cmd.id, status: "error", error: msg };
+    return { id: cmd.id, status: "failed", error: msg };
   }
 }
 
 async function handleRestart(cmd: Command): Promise<CommandAck> {
   const agent = agents.get(cmd.agentId);
   if (!agent) {
-    return { id: cmd.id, status: "error", error: `Agent ${cmd.agentId} not found` };
+    return { id: cmd.id, status: "failed", error: `Agent ${cmd.agentId} not found` };
   }
 
   try {
@@ -596,7 +596,7 @@ async function handleRestart(cmd: Command): Promise<CommandAck> {
     const msg = err instanceof Error ? err.message : String(err);
     agent.status = "error";
     saveAgents();
-    return { id: cmd.id, status: "error", error: msg };
+    return { id: cmd.id, status: "failed", error: msg };
   }
 }
 
@@ -631,14 +631,14 @@ async function handleUndeploy(cmd: Command): Promise<CommandAck> {
     return { id: cmd.id, status: "acked" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { id: cmd.id, status: "error", error: msg };
+    return { id: cmd.id, status: "failed", error: msg };
   }
 }
 
 async function handleUpdateConfig(cmd: Command): Promise<CommandAck> {
   const agent = agents.get(cmd.agentId);
   if (!agent) {
-    return { id: cmd.id, status: "error", error: `Agent ${cmd.agentId} not found` };
+    return { id: cmd.id, status: "failed", error: `Agent ${cmd.agentId} not found` };
   }
 
   try {
@@ -727,7 +727,7 @@ async function handleUpdateConfig(cmd: Command): Promise<CommandAck> {
     const msg = err instanceof Error ? err.message : String(err);
     agent.status = "error";
     saveAgents();
-    return { id: cmd.id, status: "error", error: msg };
+    return { id: cmd.id, status: "failed", error: msg };
   }
 }
 

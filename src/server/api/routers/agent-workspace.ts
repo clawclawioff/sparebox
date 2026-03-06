@@ -77,7 +77,7 @@ async function verifyOwnership(ctx: { db: typeof db; user: { id: string } }, age
 }
 
 async function queueConfigUpdate(ctx: { db: typeof db }, agentId: string, hostId: string | null, status: string | null, reason: string) {
-  if (hostId && status === "running") {
+  if (hostId && (status === "running" || status === "deploying")) {
     await ctx.db.insert(agentCommands).values({
       agentId,
       hostId,

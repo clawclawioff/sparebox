@@ -84,11 +84,15 @@ const heartbeatSchema = z.object({
     .array(
       z.object({
         id: z.string().uuid(),
-        status: z.enum(["acked", "failed"]),
+        // Accept "error" from older daemon bundles; normalize to "failed" below.
+        status: z.enum(["acked", "failed", "error"]),
         error: z.string().max(1000).optional(),
         containerId: z.string().max(100).optional(),
         deployStage: z.enum(["pulling", "creating", "starting", "health_check", "ready"]).optional(),
         deployProgress: z.number().int().min(0).max(100).optional(),
+        // Older daemon payload field names.
+        stage: z.enum(["pulling", "creating", "starting", "health_check", "ready"]).optional(),
+        progress: z.number().int().min(0).max(100).optional(),
       })
     )
     .default([]),
@@ -317,10 +321,14 @@ export async function POST(req: NextRequest) {
   if (data.commandAcks.length > 0) {
     for (const ack of data.commandAcks) {
       try {
+        const ackStatus = ack.status === "error" ? "failed" : ack.status;
+        const ackStage = ack.deployStage ?? ack.stage;
+        const ackProgress = ack.deployProgress ?? ack.progress;
+
         await db
           .update(agentCommands)
           .set({
-            status: ack.status,
+            status: ackStatus,
             ackedAt: new Date(),
             error: ack.error || null,
           })
@@ -338,17 +346,17 @@ export async function POST(req: NextRequest) {
         });
 
         // Update deploy stage/progress if provided (even before final ack)
-        if (cmd && (ack.deployStage || ack.deployProgress !== undefined)) {
+        if (cmd && (ackStage || ackProgress !== undefined)) {
           const deployUpdate: Record<string, unknown> = { updatedAt: new Date() };
-          if (ack.deployStage) deployUpdate.deployStage = ack.deployStage;
-          if (ack.deployProgress !== undefined) deployUpdate.deployProgress = ack.deployProgress;
+          if (ackStage) deployUpdate.deployStage = ackStage;
+          if (ackProgress !== undefined) deployUpdate.deployProgress = ackProgress;
           await db
             .update(agents)
             .set(deployUpdate)
             .where(eq(agents.id, cmd.agentId));
         }
 
-        if (cmd && ack.status === "acked") {
+        if (cmd && ackStatus === "acked") {
           if (cmd.type === "deploy" || cmd.type === "start" || cmd.type === "restart") {
             await db
               .update(agents)
@@ -378,7 +386,7 @@ export async function POST(req: NextRequest) {
         }
 
         // If command failed, mark agent as failed (for deploy)
-        if (cmd && ack.status === "failed" && cmd.type === "deploy") {
+        if (cmd && ackStatus === "failed" && cmd.type === "deploy") {
           await db
             .update(agents)
             .set({ status: "failed", updatedAt: new Date() })

@@ -145,7 +145,7 @@ export async function processCommands(commands) {
         catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             log("ERROR", `Command ${cmd.id} (${cmd.type}) failed: ${msg}`);
-            acks.push({ id: cmd.id, status: "error", error: msg });
+            acks.push({ id: cmd.id, status: "failed", error: msg });
         }
     }
     return acks;
@@ -165,7 +165,7 @@ async function processCommand(cmd) {
         case "update_config":
             return handleUpdateConfig(cmd);
         default:
-            return { id: cmd.id, status: "error", error: `Unknown command type: ${cmd.type}` };
+            return { id: cmd.id, status: "failed", error: `Unknown command type: ${cmd.type}` };
     }
 }
 // ---------------------------------------------------------------------------
@@ -272,10 +272,10 @@ async function handleDeploy(cmd) {
     let pid = null;
     if (isolationMode === "docker") {
         // Stage: pulling
-        queueAcks([{ id, status: "acked", stage: "pulling", progress: 0 }]);
+        queueAcks([{ id, status: "acked", deployStage: "pulling", deployProgress: 0 }]);
         await pullImage(image);
         // Stage: creating
-        queueAcks([{ id, status: "acked", stage: "creating" }]);
+        queueAcks([{ id, status: "acked", deployStage: "creating" }]);
         containerId = await createContainer({
             name: profile,
             image,
@@ -286,10 +286,10 @@ async function handleDeploy(cmd) {
             env: agentEnv,
         });
         // Stage: starting
-        queueAcks([{ id, status: "acked", stage: "starting", containerId }]);
+        queueAcks([{ id, status: "acked", deployStage: "starting", containerId }]);
         // Wait for container to be running
         let healthy = false;
-        queueAcks([{ id, status: "acked", stage: "health_check", containerId }]);
+        queueAcks([{ id, status: "acked", deployStage: "health_check", containerId }]);
         for (let i = 0; i < 10; i++) {
             await sleep(1000);
             if (await isContainerRunning(containerId)) {
@@ -358,7 +358,7 @@ async function handleDeploy(cmd) {
         pid = await startProfile(profile, port, agentEnv);
     }
     else {
-        return { id, status: "error", error: "No isolation runtime available" };
+        return { id, status: "failed", error: "No isolation runtime available" };
     }
     // Record the agent
     const record = {
@@ -376,12 +376,12 @@ async function handleDeploy(cmd) {
     agents.set(agentId, record);
     saveAgents();
     log("INFO", `Agent ${agentId} deployed: ${containerId ?? `pid:${pid}`} on port ${port}`);
-    return { id, status: "acked", containerId: containerId ?? `pid:${pid}`, stage: "ready" };
+    return { id, status: "acked", containerId: containerId ?? `pid:${pid}`, deployStage: "ready", deployProgress: 100 };
 }
 async function handleStart(cmd) {
     const agent = agents.get(cmd.agentId);
     if (!agent) {
-        return { id: cmd.id, status: "error", error: `Agent ${cmd.agentId} not found` };
+        return { id: cmd.id, status: "failed", error: `Agent ${cmd.agentId} not found` };
     }
     try {
         if (agent.isolation === "docker" && agent.containerId) {
@@ -399,13 +399,13 @@ async function handleStart(cmd) {
         const msg = err instanceof Error ? err.message : String(err);
         agent.status = "error";
         saveAgents();
-        return { id: cmd.id, status: "error", error: msg };
+        return { id: cmd.id, status: "failed", error: msg };
     }
 }
 async function handleStop(cmd) {
     const agent = agents.get(cmd.agentId);
     if (!agent) {
-        return { id: cmd.id, status: "error", error: `Agent ${cmd.agentId} not found` };
+        return { id: cmd.id, status: "failed", error: `Agent ${cmd.agentId} not found` };
     }
     try {
         if (agent.isolation === "docker" && agent.containerId) {
@@ -420,13 +420,13 @@ async function handleStop(cmd) {
     }
     catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        return { id: cmd.id, status: "error", error: msg };
+        return { id: cmd.id, status: "failed", error: msg };
     }
 }
 async function handleRestart(cmd) {
     const agent = agents.get(cmd.agentId);
     if (!agent) {
-        return { id: cmd.id, status: "error", error: `Agent ${cmd.agentId} not found` };
+        return { id: cmd.id, status: "failed", error: `Agent ${cmd.agentId} not found` };
     }
     try {
         if (agent.isolation === "docker" && agent.containerId) {
@@ -447,7 +447,7 @@ async function handleRestart(cmd) {
         const msg = err instanceof Error ? err.message : String(err);
         agent.status = "error";
         saveAgents();
-        return { id: cmd.id, status: "error", error: msg };
+        return { id: cmd.id, status: "failed", error: msg };
     }
 }
 async function handleUndeploy(cmd) {
@@ -480,13 +480,13 @@ async function handleUndeploy(cmd) {
     }
     catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        return { id: cmd.id, status: "error", error: msg };
+        return { id: cmd.id, status: "failed", error: msg };
     }
 }
 async function handleUpdateConfig(cmd) {
     const agent = agents.get(cmd.agentId);
     if (!agent) {
-        return { id: cmd.id, status: "error", error: `Agent ${cmd.agentId} not found` };
+        return { id: cmd.id, status: "failed", error: `Agent ${cmd.agentId} not found` };
     }
     try {
         // Fetch new config
@@ -558,7 +558,7 @@ async function handleUpdateConfig(cmd) {
         const msg = err instanceof Error ? err.message : String(err);
         agent.status = "error";
         saveAgents();
-        return { id: cmd.id, status: "error", error: msg };
+        return { id: cmd.id, status: "failed", error: msg };
     }
 }
 // ---------------------------------------------------------------------------

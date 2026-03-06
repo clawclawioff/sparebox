@@ -104,7 +104,7 @@ export const agentIntegrationsRouter = router({
         });
       }
 
-      if (agent.hostId && agent.status === "running") {
+      if (agent.hostId && (agent.status === "running" || agent.status === "deploying")) {
         await ctx.db.insert(agentCommands).values({
           agentId: input.agentId,
           hostId: agent.hostId,
@@ -123,7 +123,7 @@ export const agentIntegrationsRouter = router({
       await ctx.db.delete(agentIntegrations).where(
         and(eq(agentIntegrations.agentId, input.agentId), eq(agentIntegrations.integrationId, input.integrationId))
       );
-      if (agent.hostId && agent.status === "running") {
+      if (agent.hostId && (agent.status === "running" || agent.status === "deploying")) {
         await ctx.db.insert(agentCommands).values({
           agentId: input.agentId,
           hostId: agent.hostId,

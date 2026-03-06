@@ -87,6 +87,8 @@ export async function GET(
 
   // Parse agent config (OpenClaw config overrides)
   const agentConfig = (agent.config as Record<string, unknown>) || {};
+  // Parse settings (dashboard configuration)
+  const settings = (agent.settings as Record<string, unknown>) || {};
 
   // 4. Build environment variables for the agent
   //    This is the KEY fix: we must pass the API key and model as env vars
@@ -117,7 +119,7 @@ export async function GET(
     env.OPENCLAW_PROVIDER = effectiveProvider;
   }
 
-  // Set model: explicit llmModel > config model > provider default
+  // Set model: explicit llmModel > config model > settings model > provider default
   // Ensure model always has provider prefix (OpenClaw requires "provider/model" format)
   const ensureProviderPrefix = (model: string, provider: string): string => {
     if (model.includes("/")) return model; // already prefixed
@@ -128,6 +130,8 @@ export async function GET(
     env.OPENCLAW_MODEL = ensureProviderPrefix(agent.llmModel, effectiveProvider);
   } else if (agentConfig.model && typeof agentConfig.model === "string") {
     env.OPENCLAW_MODEL = ensureProviderPrefix(agentConfig.model, effectiveProvider);
+  } else if (settings.model && typeof settings.model === "string") {
+    env.OPENCLAW_MODEL = ensureProviderPrefix(settings.model, effectiveProvider);
   } else {
     env.OPENCLAW_MODEL = providerDefaultModel[effectiveProvider] || "anthropic/claude-sonnet-4-6";
   }
@@ -168,7 +172,6 @@ export async function GET(
   }
 
   // Apply agent settings
-  const settings = (agent.settings as Record<string, unknown>) || {};
   if (settings.timezone && typeof settings.timezone === "string") {
     env.TZ = settings.timezone;
   }
